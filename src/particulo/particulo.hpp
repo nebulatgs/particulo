@@ -1,14 +1,15 @@
 #define GLFW_INCLUDE_NONE
+#include <vector>
 #include <GLFW/glfw3.h>
 #include <glad/glad.h>
 
 #include <memory>
 #include <string>
-
+template <typename T>
 class Particulo {
 protected:
   std::string _title;
-
+  std::vector<T> particles;
 private:
   int _width;
   int _height;
@@ -17,14 +18,14 @@ private:
 
 public:
   virtual void init() = 0;
-  virtual void simulate(float timeElapsed) = 0;
+  virtual void simulate(std::vector<T>& particles, float timeElapsed) = 0;
   virtual ~Particulo(){};
 
 public:
   void Create(int width, int height, std::string title = "Particulo") {
     _title = title;
-    init();
     gfxInit(width, height);
+    init();
   }
 
 private:
