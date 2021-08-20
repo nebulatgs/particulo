@@ -1,6 +1,5 @@
 #include <tuple>
 #define GLFW_INCLUDE_NONE
-
 #include <chrono>
 using std::chrono::duration;
 using std::chrono::duration_cast;

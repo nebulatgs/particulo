@@ -20,6 +20,9 @@ include_directories("../lib/glm")
 include_directories("../src")
 
 add_executable(particulo_example ${SOURCE_FILES})
+if (WIN32)
+target_link_options(particulo_example PRIVATE "-static-libgcc" "-static-libstdc++")
+endif()
 
 target_link_libraries(particulo_example glfw ${GLFW_LIBRARIES})
 target_link_libraries(particulo_example glad)

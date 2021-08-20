@@ -33,7 +33,7 @@ class Example : public Particulo::Particulo<Particle>
       {
          // x->pos.x += 0.1;
          // x->pos.y += 0.1;
-         // cout << x->pos.x << endl;
+         cout << x->pos.x << endl;
       }
       SetBGColor(0x222f3eFF);
       // SetBGColor(0xFFFFFFFF);
