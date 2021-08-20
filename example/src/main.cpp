@@ -1,40 +1,48 @@
 #include <chrono>
 using namespace std::chrono_literals;
 
+#include <string>
+using std::string;
+
 #include <iostream>
 using std::cout;
 using std::endl;
 
 #include <memory>
 using std::make_unique;
+using std::shared_ptr;
 
 #include <vector>
 using std::vector;
 
 #include <particulo/particulo.hpp>
+
 struct Particle
 {
-   double x;
-   double y;
-   uint32_t color;
+   Particle(int index) : index(index), color(0x2998C5FF), size(1) {}
+   const int index;
+   v2d::v2d pos;
+   uint32_t color = 0xFFFFFFFF;
+   float size = 1000000;
 };
 class Example : public Particulo::Particulo<Particle>
 {
-   void simulate(vector<Particle>& particles, milliseconds timeElapsed) override
+   void simulate(vector<shared_ptr<Particle>>& particles, milliseconds timeElapsed) override
    {
       for (auto& x : particles)
       {
-         x.x += 0.1;
-         x.y += 0.1;
+         // x->pos.x += 0.1;
+         // x->pos.y += 0.1;
+         // cout << x->pos.x << endl;
       }
-      cout << timeElapsed.count() << endl;
+      SetBGColor(0x222f3eFF);
+      // SetBGColor(0xFFFFFFFF);
    }
 };
 
 int main()
 {
    auto a = make_unique<Example>();
-   a->Create(300, 300, 10, "Particulo Example");
+   a->Create(600, 600, 10, "Particulo Example", 10);
    a->Start(33ms);
-   //  std::this_thread::sleep_for(std::chrono::seconds(10));
 }
