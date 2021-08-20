@@ -19,7 +19,12 @@ using std::vector;
 
 struct Particle
 {
-   Particle(int index) : index(index), color(0x2998C5FF), radius(5), pos(0, 100, 0, 100) {}
+   Particle(int index) : index(index)
+       , color(0x2998C5FF)
+       , radius(5)
+       , pos(0, 100, 0, 100)
+       , vel(0, 10, 0, 10)
+       , acc(0, 10, 0, 10) {}
    Particle(int index, int width, int height)
        : index(index)
        , color(0x2998C5FF)
@@ -51,7 +56,7 @@ class Example : public Particulo::Particulo<Particle>
          if (p->pos.x > GetWidth() || p->pos.x < 0) { p->vel.x *= -1; }
          if (p->pos.y > GetHeight() || p->pos.y < 0) { p->vel.y *= -1; }
       }
-      Add(GetWidth(), GetHeight());
+      // Add(GetWidth(), GetHeight());
       SetBGColor(0x222f3eFF);
       // SetTitle(std::to_string(timeElapsed.count()));
       // SetBGColor(0xFFFFFFFF);

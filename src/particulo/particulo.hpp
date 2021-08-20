@@ -182,6 +182,7 @@ public:
 private:
    void commonDraw()
    {
+      glfwPollEvents();
       glClearColor(bgColor.r, bgColor.g, bgColor.b, bgColor.a);
       glClear(GL_COLOR_BUFFER_BIT);
       glfwGetFramebufferSize(window, &p_width, &p_height);
