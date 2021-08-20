@@ -2,7 +2,6 @@ cmake_minimum_required(VERSION 3.16.3)
 project(particulo_example)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
-
 set(SOURCE_FILES src/main.cpp)
 include_directories("../lib/emsdk/upstream/emscripten/system/include")
 

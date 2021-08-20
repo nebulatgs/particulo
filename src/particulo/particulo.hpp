@@ -43,10 +43,10 @@ namespace Particulo
 // Concepts
 template <typename T>
 concept BasicParticleXY = (is_arithmetic_v<typeof T::index> && is_arithmetic_v<typeof T::x> &&
-                           same_as<typeof T::x, typeof T::y> && same_as<typeof T::size, float>);
+                           same_as<typeof T::x, typeof T::y> && same_as<typeof T::radius, float>);
 
 template <typename T>
-concept BasicParticleV = (same_as<typeof T::pos, v2d::v2d> && same_as<typeof T::size, float>);
+concept BasicParticleV = (same_as<typeof T::pos, v2d::v2d> && same_as<typeof T::radius, float>);
 
 template <typename T>
 concept Particle = (BasicParticleXY<T> || BasicParticleV<T>) &&(constructible_from<T, int> ||
@@ -66,34 +66,61 @@ struct RGBA
    float b;
    float a;
 };
-
 // Main
 template <ColorfulParticle T>
 class Particulo
 {
 protected:
-   string _title;
+   const string& GetTitle() const { return p_title; }
+   const glm::mat4& GetTransform() const { return p_transform; }
+   const float GetWidth() const { return p_width; }
+   const float GetHeight() const { return p_height; }
+   const float GetMaxCount() const { return p_maxCount; }
+   const time_point& GetInitialTime() const { return p_initialTime; }
+
+protected:
+   void SetTitle(string title)
+   {
+      p_title = title;
+      glfwSetWindowTitle(window, title.c_str());
+   }
+   void SetTransform(glm::mat4 transform) { p_transform = transform; }
+   T GetNewParticle() const { return T(++maxParticleIndex); }
+   // You probably want to use GetNewParticle to get a particle with an assigned index before
+   // calling this method
+   void Add(const T& particle) { particles.push_back(make_shared<T>(particle)); }
+   template <typename... _Args>
+   void Add(_Args&&... __args)
+   {
+      particles.push_back(make_shared<T>(++maxParticleIndex, __args...));
+   }
+
+private:
+   string p_title;
+   glm::mat4 p_transform = glm::mat4(1.0f);
+   int p_width;
+   int p_height;
+   int p_maxCount;
+   time_point p_initialTime;
 
 private:
    GLuint VAO;
-   int _maxCount;
    Shader shader;
    GLuint particles_position_buffer;
    GLuint particles_color_buffer;
    GLuint billboard_vertex_buffer;
-   vector<GLfloat> g_particule_position_size_data;
-   vector<GLfloat> g_particule_color_data;
-   glm::mat4 transform;
+   vector<GLfloat> particle_position_size_data;
+   vector<GLfloat> particle_color_data;
 
 private:
    vector<shared_ptr<T>> particles;
-   int _width;
-   int _height;
-   GLFWwindow* _window;
+   GLFWwindow* window;
    bool isReady;
    milliseconds timeElapsed;
-   time_point initialTime;
    RGBA bgColor = {0.0f, 0.0f, 0.0f, 1.0f};
+   mutable int maxParticleIndex;
+   glm::mat4 screenCorrectionTransform = glm::mat4(1.0f);
+   glm::mat4 identity = glm::mat4(1.0f);
 
 public:
    virtual void init() {}
@@ -118,10 +145,11 @@ public:
    {
       if (initialCount > maxCount)
          throw std::runtime_error("Attempted to exceed the max particle count during creation");
-      initialTime = high_resolution_clock::now();
-      _maxCount = maxCount;
-      _title = title;
+      p_initialTime = high_resolution_clock::now();
+      p_maxCount = maxCount;
+      p_title = title;
       for (int i = 0; i < initialCount; i++) { particles.push_back(make_shared<T>(i)); }
+      maxParticleIndex = initialCount - 1;
       gfxInit(width, height);
       bufferInit();
       init();
@@ -156,11 +184,19 @@ private:
    {
       glClearColor(bgColor.r, bgColor.g, bgColor.b, bgColor.a);
       glClear(GL_COLOR_BUFFER_BIT);
-      shader.Use();
+      glfwGetFramebufferSize(window, &p_width, &p_height);
+      glViewport(0, 0, p_width, p_height);
+      glOrtho(0, p_width, p_height, 0, 1, -1);
+      screenCorrectionTransform =
+          glm::scale(identity, {2.0f / static_cast<float>(p_width),
+                                -2.0f / static_cast<float>(p_height), 1.0f});
+      auto tempMatrix = screenCorrectionTransform * p_transform;
+      tempMatrix = glm::translate(tempMatrix, {p_width / -2.0f, p_height / -2.0f, 0.0f});
+      shader.SetMatrix4("transform", tempMatrix, true);
       setParticlePos();
       updateBuffers();
       draw();
-      glfwSwapBuffers(_window);
+      glfwSwapBuffers(window);
    }
 
    std::tuple<float, float, float, float> uint32ToFloatColor(uint32_t color)
@@ -174,14 +210,14 @@ private:
             uint8_t b;
             uint8_t g;
             uint8_t r;
-         } subpixels;
+         };
       } temp;
       temp.hex = color;
       return {
-          temp.subpixels.r / 255.0f,
-          temp.subpixels.g / 255.0f,
-          temp.subpixels.b / 255.0f,
-          temp.subpixels.a / 255.0f,
+          temp.r / 255.0f,
+          temp.g / 255.0f,
+          temp.b / 255.0f,
+          temp.a / 255.0f,
       };
    }
 
@@ -190,16 +226,16 @@ private:
       int i = 0;
       for (auto& particle : particles)
       {
-         g_particule_position_size_data[i] = particle->x;
-         g_particule_position_size_data[i + 1] = particle->y;
-         g_particule_position_size_data[i + 2] = 0;
-         g_particule_position_size_data[i + 3] = particle->size;
+         particle_position_size_data[i] = particle->x;
+         particle_position_size_data[i + 1] = particle->y;
+         particle_position_size_data[i + 2] = 0;
+         particle_position_size_data[i + 3] = particle->radius;
 
          auto [r, g, b, a] = uint32ToFloatColor(particle->color);
-         g_particule_color_data[i] = r;
-         g_particule_color_data[i + 1] = g;
-         g_particule_color_data[i + 2] = b;
-         g_particule_color_data[i + 3] = a;
+         particle_color_data[i] = r;
+         particle_color_data[i + 1] = g;
+         particle_color_data[i + 2] = b;
+         particle_color_data[i + 3] = a;
 
          i += 4;
       }
@@ -210,16 +246,16 @@ private:
       int i = 0;
       for (auto& particle : particles)
       {
-         g_particule_position_size_data[i] = particle->pos.x;
-         g_particule_position_size_data[i + 1] = particle->pos.y;
-         g_particule_position_size_data[i + 2] = 0;
-         g_particule_position_size_data[i + 3] = particle->size;
+         particle_position_size_data[i] = particle->pos.x;
+         particle_position_size_data[i + 1] = particle->pos.y;
+         particle_position_size_data[i + 2] = 0;
+         particle_position_size_data[i + 3] = particle->radius;
 
          auto [r, g, b, a] = uint32ToFloatColor(particle->color);
-         g_particule_color_data[i] = r;
-         g_particule_color_data[i + 1] = g;
-         g_particule_color_data[i + 2] = b;
-         g_particule_color_data[i + 3] = a;
+         particle_color_data[i] = r;
+         particle_color_data[i + 1] = g;
+         particle_color_data[i + 2] = b;
+         particle_color_data[i + 3] = a;
 
          i += 4;
       }
@@ -227,7 +263,6 @@ private:
 
    void draw() requires(ColorfulParticle<T>)
    {
-      shader.SetMatrix4("transform", transform, true);
       // 1st attribute buffer : vertices
       glEnableVertexAttribArray(0);
       glBindBuffer(GL_ARRAY_BUFFER, billboard_vertex_buffer);
@@ -270,43 +305,43 @@ private:
       glVertexAttribDivisor(1, 1); // positions : one per quad (its center) -> 1
       glVertexAttribDivisor(2, 1); // color : one per quad -> 1
 
-      glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, _maxCount);
+      glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, p_maxCount);
    }
 
 private:
    void gfxInit(int width, int height)
    {
-      _width = width;
-      _height = height;
+      p_width = width;
+      p_height = height;
       // Try to initialize GLFW
       if (!glfwInit()) throw std::runtime_error("Unable to initialize GLFW");
 
       // Try to create a window
       glfwWindowHint(GLFW_SAMPLES, 4);
-      glfwWindowHint(GLFW_RESIZABLE, GL_FALSE);
+      glfwWindowHint(GLFW_RESIZABLE, GL_TRUE);
       // glfwWindowHint(GL_MAJOR_VERSION, 3);
       // glfwWindowHint(GL_MINOR_VERSION, 1);
       glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
       glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 5);
       glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
       // glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_ANY_PROFILE);
-      _window = glfwCreateWindow(_width, _height, _title.c_str(), NULL, NULL);
-      if (!_window) throw std::runtime_error("Unable to create GLFW Window");
+      window = glfwCreateWindow(p_width, p_height, p_title.c_str(), NULL, NULL);
+      if (!window) throw std::runtime_error("Unable to create GLFW Window");
 
       // Load GL
-      glfwMakeContextCurrent(_window);
+      glfwMakeContextCurrent(window);
       gladLoadGL();
 
       // Set viewport
       printf("%s\n", glGetString(GL_VERSION));
-      glfwGetFramebufferSize(_window, &this->_width, &this->_height);
-      glViewport(0, 0, this->_width, this->_height);
+      glfwGetFramebufferSize(window, &p_width, &p_height);
+      glViewport(0, 0, p_width, p_height);
       glMatrixMode(GL_PROJECTION);
       glLoadIdentity();
-      glOrtho(0, this->_width, this->_height, 0, 1, -1);
+      glOrtho(0, p_width, p_height, 0, 1, -1);
       glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
       glEnable(GL_BLEND);
-      glClearColor(0.0f, 1.0f, 1.0f, 1.0f);
+      glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
       glfwSwapInterval(1);
       isReady = true;
    }
@@ -314,25 +349,25 @@ private:
    void updateBuffers()
    {
       glBindBuffer(GL_ARRAY_BUFFER, particles_position_buffer);
-      glBufferData(GL_ARRAY_BUFFER, _maxCount * 4 * sizeof(GLfloat), NULL,
+      glBufferData(GL_ARRAY_BUFFER, p_maxCount * 4 * sizeof(GLfloat), NULL,
                    GL_STREAM_DRAW); // Buffer orphaning, a common way to improve streaming perf. See
                                     // above link for details.
-      glBufferSubData(GL_ARRAY_BUFFER, 0, _maxCount * sizeof(GLfloat) * 4,
-                      g_particule_position_size_data.data());
+      glBufferSubData(GL_ARRAY_BUFFER, 0, p_maxCount * sizeof(GLfloat) * 4,
+                      particle_position_size_data.data());
 
       glBindBuffer(GL_ARRAY_BUFFER, particles_color_buffer);
-      glBufferData(GL_ARRAY_BUFFER, _maxCount * 4 * sizeof(GLfloat), NULL,
+      glBufferData(GL_ARRAY_BUFFER, p_maxCount * 4 * sizeof(GLfloat), NULL,
                    GL_STREAM_DRAW); // Buffer orphaning, a common way to improve streaming perf. See
                                     // above link for details.
-      glBufferSubData(GL_ARRAY_BUFFER, 0, _maxCount * sizeof(GLfloat) * 4,
-                      g_particule_color_data.data());
+      glBufferSubData(GL_ARRAY_BUFFER, 0, p_maxCount * sizeof(GLfloat) * 4,
+                      particle_color_data.data());
    }
 
    void bufferInit() requires(ColorfulParticle<T>)
    {
-      g_particule_position_size_data.resize(_maxCount * 4);
-      g_particule_color_data.resize(_maxCount * 4);
-      particles.reserve(_maxCount);
+      particle_position_size_data.resize(p_maxCount * 4);
+      particle_color_data.resize(p_maxCount * 4);
+      particles.reserve(p_maxCount);
       shader.Compile("../../src/particulo/circle.vert", "../../src/particulo/circle.frag");
       static const GLfloat vertices[] = {
           -1.0f, -1.0f, 0.0f, 1.0f, -1.0f, 0.0f, -1.0f, 1.0f, 0.0f, 1.0f, 1.0f, 0.0f,
@@ -360,13 +395,13 @@ private:
       glGenBuffers(1, &particles_position_buffer);
       glBindBuffer(GL_ARRAY_BUFFER, particles_position_buffer);
       // Initialize with empty (NULL) buffer : it will be updated later, each frame.
-      glBufferData(GL_ARRAY_BUFFER, _maxCount * 4 * sizeof(GLfloat), NULL, GL_STREAM_DRAW);
+      glBufferData(GL_ARRAY_BUFFER, p_maxCount * 4 * sizeof(GLfloat), NULL, GL_STREAM_DRAW);
 
       // The VBO containing the colors of the particles
       glGenBuffers(1, &particles_color_buffer);
       glBindBuffer(GL_ARRAY_BUFFER, particles_color_buffer);
       // Initialize with empty (NULL) buffer : it will be updated later, each frame.
-      glBufferData(GL_ARRAY_BUFFER, _maxCount * 4 * sizeof(GLubyte), NULL, GL_STREAM_DRAW);
+      glBufferData(GL_ARRAY_BUFFER, p_maxCount * 4 * sizeof(GLubyte), NULL, GL_STREAM_DRAW);
 
       // particles.emplace_back(5000000, glm::vec4(0.0, 0.722, 0.58, 1.0));
       // g_particule_color_data.push_back(particles.back().color.r);
@@ -390,7 +425,7 @@ private:
    {
       tick();
       sleep_for(sleepInterval);
-      timeElapsed = duration_cast<milliseconds>(high_resolution_clock::now() - initialTime);
+      timeElapsed = duration_cast<milliseconds>(high_resolution_clock::now() - p_initialTime);
    }
 };
 } // namespace Particulo

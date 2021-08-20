@@ -11,6 +11,7 @@ float aastep(float threshold, float value) {
 
 void main()
 {
+	// FragColor = coord;
 	if(col.a == 0.0)
 	{
 		discard;

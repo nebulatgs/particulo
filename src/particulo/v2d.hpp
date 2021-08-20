@@ -1,11 +1,16 @@
 #include <algorithm>
+#include <chrono>
 #include <cstdint>
 #include <math.h>
+#include <random>
 namespace v2d
 {
-inline float randMapped() { return (std::rand() / std::numeric_limits<float>::max()); }
+static float randMapped()
+{
+   return (std::rand() / static_cast<float>(std::numeric_limits<int>::max()));
+}
 
-inline float inv_sqrt(float x)
+static float inv_sqrt(float x)
 {
    union
    {
@@ -15,7 +20,8 @@ inline float inv_sqrt(float x)
    y.u = 0x5F1FFFF9ul - (y.u >> 1);
    return 0.703952253f * y.f * (2.38924456f - x * y.f * y.f);
 }
-
+static std::random_device device;
+static std::mt19937 gen = std::mt19937(device());
 struct v2d
 {
    // Create an empty vector
@@ -26,8 +32,14 @@ struct v2d
    }
    // Create a vector from _x and _y
    v2d(const float _x, const float _y) : x(_x), y(_y) {}
-   // Create a new vector from frm
-   // v2d(const v2d& frm) : x(frm.x), y(frm.y) {}
+   // Create a random vector
+   v2d(const float xMin, const float xMax, const float yMin, const float yMax)
+   {
+      std::uniform_int_distribution<int> xDistr(xMin, xMax);
+      std::uniform_int_distribution<int> yDistr(yMin, yMax);
+      x = xDistr(gen);
+      y = yDistr(gen);
+   }
    // Set vector to _x and _y
    v2d set(float _x, float _y)
    {
@@ -42,6 +54,7 @@ struct v2d
       set(cos(r) * scale, sin(r) * scale);
       return (*this);
    }
+
    // Set vector to zero
    void zero()
    {
