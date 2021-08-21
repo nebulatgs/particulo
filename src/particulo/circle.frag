@@ -11,24 +11,17 @@ float aastep(float threshold, float value) {
 
 void main()
 {
-	// FragColor = coord;
 	if(col.a == 0.0)
 	{
 		discard;
 	}
 	FragColor.rgb = col.rgb;
-	// FragColor.rgb = vec3(0.424, 0.361, 0.906);
 	
 	FragColor.a = aastep(-1.0, -1.0 * length(coord.xyz));
 	FragColor.a *= col.a;
 	
-	// FragColor.a += 0.2;
 	if(FragColor.a == 0.0)
 	{
 		discard;
 	}
-	// else
-	// {
-	// 	// FragColor.a /= 1.25;
-	// }
 }

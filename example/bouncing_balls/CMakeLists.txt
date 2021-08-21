@@ -1,0 +1,14 @@
+cmake_minimum_required(VERSION 3.16.3)
+project(bouncing_balls)
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED True)
+set(SOURCE_FILES src/main.cpp)
+
+add_executable(bouncing_balls ${SOURCE_FILES})
+if (WIN32)
+target_link_options(bouncing_balls PRIVATE "-static-libgcc" "-static-libstdc++")
+endif()
+
+target_link_libraries(bouncing_balls glfw ${GLFW_LIBRARIES})
+target_link_libraries(bouncing_balls glad)
+target_link_libraries(bouncing_balls glm)

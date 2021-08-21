@@ -40,6 +40,55 @@ using std::vector;
 #include <glad/glad.h>
 namespace Particulo
 {
+// Shaders
+static const string VertexShader = R"(
+   #version 450 core
+   precision highp float;
+   layout (location = 0) in lowp vec3 aPos;
+   layout (location = 1) in lowp vec4 pPos;
+   layout (location = 2) in lowp vec4 pCol;
+   uniform mat4 transform;
+   out vec4 coord;
+   out vec4 col;
+   void main()
+   {
+      vec4 pPost = (pPos + (vec4(aPos, 1.0) * pPos.w));
+      gl_Position = transform * vec4(pPost.x, pPost.y, 1.0, 1.0);
+      coord = vec4(aPos, 1.0);
+      col = pCol;
+   }
+)";
+
+static const string FragmentShader = R"(
+   #version 450 core
+   precision highp float;
+   out vec4 FragColor;
+   in vec4 coord;
+   in vec4 col;
+
+   float aastep(float threshold, float value) {
+   float afwidth = 0.7 * length(vec2(dFdx(value), dFdy(value)));
+   return smoothstep(threshold-afwidth, threshold+afwidth, value);
+   }
+
+   void main()
+   {
+      if(col.a == 0.0)
+      {
+         discard;
+      }
+      FragColor.rgb = col.rgb;
+      
+      FragColor.a = aastep(-1.0, -1.0 * length(coord.xyz));
+      FragColor.a *= col.a;
+      
+      if(FragColor.a == 0.0)
+      {
+         discard;
+      }
+   }
+)";
+
 // Concepts
 template <typename T>
 concept BasicParticleXY = (is_arithmetic_v<typeof T::index> && is_arithmetic_v<typeof T::x> &&
@@ -124,7 +173,8 @@ private:
 
 public:
    virtual void init() {}
-   virtual void simulate(vector<shared_ptr<T>>& particles, milliseconds timeElapsed) = 0;
+   virtual void simulate(const vector<shared_ptr<T>>& particles, milliseconds timeElapsed) = 0;
+   virtual void update(const vector<shared_ptr<T>>& particles, milliseconds timeElapsed){};
    virtual ~Particulo(){};
 
 public:
@@ -158,6 +208,7 @@ public:
    void tick()
    {
       simulate(particles, timeElapsed);
+      update(particles, timeElapsed);
       commonDraw();
    }
 
@@ -200,7 +251,7 @@ private:
       glfwSwapBuffers(window);
    }
 
-   std::tuple<float, float, float, float> uint32ToFloatColor(uint32_t color)
+   static std::tuple<float, float, float, float> uint32ToFloatColor(uint32_t color)
    {
       union
       {
@@ -309,8 +360,7 @@ private:
       glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, p_maxCount);
    }
 
-private:
-   void gfxInit(int width, int height)
+private : void gfxInit(int width, int height)
    {
       p_width = width;
       p_height = height;
@@ -320,12 +370,9 @@ private:
       // Try to create a window
       glfwWindowHint(GLFW_SAMPLES, 4);
       glfwWindowHint(GLFW_RESIZABLE, GL_TRUE);
-      // glfwWindowHint(GL_MAJOR_VERSION, 3);
-      // glfwWindowHint(GL_MINOR_VERSION, 1);
       glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
       glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 5);
       glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-      // glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_ANY_PROFILE);
       window = glfwCreateWindow(p_width, p_height, p_title.c_str(), NULL, NULL);
       if (!window) throw std::runtime_error("Unable to create GLFW Window");
 
@@ -369,7 +416,7 @@ private:
       particle_position_size_data.resize(p_maxCount * 4);
       particle_color_data.resize(p_maxCount * 4);
       particles.reserve(p_maxCount);
-      shader.Compile("../../src/particulo/circle.vert", "../../src/particulo/circle.frag");
+      shader.CompileStrings(VertexShader, FragmentShader);
       static const GLfloat vertices[] = {
           -1.0f, -1.0f, 0.0f, 1.0f, -1.0f, 0.0f, -1.0f, 1.0f, 0.0f, 1.0f, 1.0f, 0.0f,
       };
@@ -403,26 +450,11 @@ private:
       glBindBuffer(GL_ARRAY_BUFFER, particles_color_buffer);
       // Initialize with empty (NULL) buffer : it will be updated later, each frame.
       glBufferData(GL_ARRAY_BUFFER, p_maxCount * 4 * sizeof(GLubyte), NULL, GL_STREAM_DRAW);
-
-      // particles.emplace_back(5000000, glm::vec4(0.0, 0.722, 0.58, 1.0));
-      // g_particule_color_data.push_back(particles.back().color.r);
-      // g_particule_color_data.push_back(particles.back().color.g);
-      // g_particule_color_data.push_back(particles.back().color.b);
-      // g_particule_color_data.push_back(particles.back().color.a);
-      // for (int i = 0; i < maxCount - 1; i++)
-      // {
-      //    particles.emplace_back((i % 3 > 1 ? glm::vec4(0.424, 0.361, 0.906, 0.75)
-      //                                      : glm::vec4(0.035, 0.518, 0.89, 0.75)));
-      //    g_particule_color_data.push_back(particles.back().color.r);
-      //    g_particule_color_data.push_back(particles.back().color.g);
-      //    g_particule_color_data.push_back(particles.back().color.b);
-      //    g_particule_color_data.push_back(particles.back().color.a);
-      // }
    }
 
-private:
-   template <typename _Rep, typename _Period>
-   void loop(duration<_Rep, _Period> sleepInterval)
+private : template <typename _Rep, typename _Period>
+          void
+          loop(duration<_Rep, _Period> sleepInterval)
    {
       tick();
       sleep_for(sleepInterval);

@@ -5,12 +5,12 @@
 #include <random>
 namespace v2d
 {
-static float randMapped()
+inline float randMapped()
 {
    return (std::rand() / static_cast<float>(std::numeric_limits<int>::max()));
 }
 
-static float inv_sqrt(float x)
+inline float inv_sqrt(float x)
 {
    union
    {
