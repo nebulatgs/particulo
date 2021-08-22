@@ -250,6 +250,8 @@ private:
    glm::mat4 identity = glm::mat4(1.0f);
    glm::mat4 tempMatrix = glm::mat4(1.0f);
    bool isClosing = false;
+   int wPosX, wPosY;
+   int wSizeX, wSizeY;
 
 private:
    vector<thread> simThreads;
@@ -284,12 +286,18 @@ public:
    void ToggleFullscreen() {
       if (!p_fullscreen)
       {
+         glfwGetWindowPos(window, &wPosX, &wPosY);
+         glfwGetWindowSize(window, &wSizeX, &wSizeY);
          auto* monitor = glfwGetPrimaryMonitor();
          auto* vidMode = glfwGetVideoMode(monitor);
          glfwSetWindowMonitor(window, monitor, 0, 0, vidMode->width, vidMode->height, GLFW_DONT_CARE);
+         glfwSwapInterval(1);
       }
       else
-      { glfwSetWindowMonitor(window, nullptr, 0, 0, 0, 0, GLFW_DONT_CARE); }
+      {
+         glfwSetWindowMonitor(window, nullptr, wPosX, wPosY, wSizeX, wSizeY, GLFW_DONT_CARE);
+         glfwSwapInterval(1);
+      }
       p_fullscreen = !p_fullscreen;
    }
    void Create(int width, int height, int initialCount, string title = "Particulo", int maxCount = 1 << 14) {
