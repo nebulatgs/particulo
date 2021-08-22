@@ -1,11 +1,12 @@
-#include <tuple>
 #define GLFW_INCLUDE_NONE
+#include <tuple>
+
 #include <chrono>
 using std::chrono::duration;
 using std::chrono::duration_cast;
 using std::chrono::high_resolution_clock;
 using std::chrono::milliseconds;
-using time_point = std::chrono::system_clock::time_point;
+using time_point = std::chrono::high_resolution_clock::time_point;
 
 #include <memory>
 using std::make_shared;
@@ -34,10 +35,17 @@ using std::is_arithmetic_v;
 #include <vector>
 using std::vector;
 
+// #include <thread>
+// using std::thread;
+
+// #include <mutex>
+// using std::mutex;
+
 #include "shader.hpp"
 #include "v2d.hpp"
 #include <GLFW/glfw3.h>
 #include <glad/glad.h>
+#include <glm/gtc/matrix_inverse.hpp>
 namespace Particulo
 {
 // Shaders
@@ -119,6 +127,43 @@ struct RGBA
 template <ColorfulParticle T>
 class Particulo
 {
+private:
+   static void s_ScrollCallback(GLFWwindow* window, double x, double y)
+   {
+      auto instance = reinterpret_cast<Particulo*>(glfwGetWindowUserPointer(window));
+      instance->onScroll(x, y);
+   }
+   static void s_MouseClickCallback(GLFWwindow* window, int button, int action, int mods)
+   {
+      auto instance = reinterpret_cast<Particulo*>(glfwGetWindowUserPointer(window));
+      instance->onMouseClick(button, action, mods);
+   }
+   static void s_MouseMoveCallback(GLFWwindow* window, double x, double y)
+   {
+      auto instance = reinterpret_cast<Particulo*>(glfwGetWindowUserPointer(window));
+      instance->onMouseMove(x, y);
+   }
+   static void s_KeyboardTypeCallback(GLFWwindow* window, unsigned int codepoint)
+   {
+      auto instance = reinterpret_cast<Particulo*>(glfwGetWindowUserPointer(window));
+      instance->onType(codepoint);
+   }
+   static void s_WindowClose(GLFWwindow* window)
+   {
+      auto instance = reinterpret_cast<Particulo*>(glfwGetWindowUserPointer(window));
+      instance->isClosing = true;
+      instance->onClose();
+      glfwDestroyWindow(window);
+   }
+
+public:
+   virtual void onScroll(double x, double y) {}
+   virtual void onMouseClick(int button, int action, int mods) {}
+   virtual void onMouseMove(double x, double y) {}
+   virtual void onType(char32_t codepoint) {}
+   // Called if the user closes the graphics window but before the program exits
+   virtual void onClose() {}
+
 protected:
    const string& GetTitle() const { return p_title; }
    const glm::mat4& GetTransform() const { return p_transform; }
@@ -126,6 +171,23 @@ protected:
    const float GetHeight() const { return p_height; }
    const float GetMaxCount() const { return p_maxCount; }
    const time_point& GetInitialTime() const { return p_initialTime; }
+   const std::tuple<double, double> GetMousePos() const
+   {
+      double x, y;
+      glfwGetCursorPos(window, &x, &y);
+      return {x, y};
+   }
+   const bool GetFullscreenState() const { return p_fullscreen; }
+   // const std::tuple<double, double> GetTransformedMousePos() const
+   // {
+   //    double x, y;
+   //    glfwGetCursorPos(window, &x, &y);
+   //    auto transformedCoords = p_transform * glm::dvec4(x, y, 1.0, 1.0);
+   //    cout << transformedCoords.x << " " << transformedCoords.y << " " << transformedCoords.z <<
+   //    " "
+   //         << transformedCoords.w << endl;
+   //    return {transformedCoords.x, transformedCoords.y};
+   // }
 
 protected:
    void SetTitle(string title)
@@ -134,14 +196,25 @@ protected:
       glfwSetWindowTitle(window, title.c_str());
    }
    void SetTransform(glm::mat4 transform) { p_transform = transform; }
-   T GetNewParticle() const { return T(++maxParticleIndex); }
-   // You probably want to use GetNewParticle to get a particle with an assigned index before
-   // calling this method
-   void Add(const T& particle) { particles.push_back(make_shared<T>(particle)); }
    template <typename... _Args>
-   void Add(_Args&&... __args)
+   shared_ptr<T> Add(_Args&&... __args)
    {
-      particles.push_back(make_shared<T>(++maxParticleIndex, __args...));
+      if (particles.size() >= p_maxCount)
+      {
+         throw std::logic_error("Attempted to exceed the max particle count in instance method "
+                                "Add(_Args&&... __args)");
+      }
+      auto particle = make_shared<T>(++maxParticleIndex, __args...);
+      particles.push_back(particle);
+      return particle;
+   }
+   void Remove() { particles.pop_back(); }
+   void Remove(int i) { particles.erase(particles.front() + i); }
+   void Clear()
+   {
+      particles.clear();
+      std::fill(particle_position_size_data.begin(), particle_position_size_data.end(), 0);
+      std::fill(particle_color_data.begin(), particle_color_data.end(), 0);
    }
 
 private:
@@ -151,6 +224,7 @@ private:
    int p_height;
    int p_maxCount;
    time_point p_initialTime;
+   bool p_fullscreen = false;
 
 private:
    GLuint VAO;
@@ -170,6 +244,12 @@ private:
    mutable int maxParticleIndex;
    glm::mat4 screenCorrectionTransform = glm::mat4(1.0f);
    glm::mat4 identity = glm::mat4(1.0f);
+   glm::mat4 tempMatrix = glm::mat4(1.0f);
+   bool isClosing = false;
+
+   // private:
+   //    thread drawThread;
+   //    mutex drawMutex;
 
 public:
    virtual void init() {}
@@ -190,11 +270,36 @@ public:
           a,
       };
    }
+   void DisableCursor()
+   {
+      if (!isReady) { throw std::logic_error("Cannot disable cursor before initialization"); }
+      glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+   }
+   void EnableCursor()
+   {
+      if (!isReady) { throw std::logic_error("Cannot enable cursor before initialization"); }
+      glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+   }
+   void ToggleFullscreen()
+   {
+      if (!p_fullscreen)
+      {
+         auto* monitor = glfwGetPrimaryMonitor();
+         auto* vidMode = glfwGetVideoMode(monitor);
+         glfwSetWindowMonitor(window, monitor, 0, 0, vidMode->width, vidMode->height,
+                              GLFW_DONT_CARE);
+      }
+      else
+      {
+         glfwSetWindowMonitor(window, nullptr, 0, 0, 0, 0, GLFW_DONT_CARE);
+      }
+      p_fullscreen = !p_fullscreen;
+   }
    void Create(int width, int height, int initialCount, string title = "Particulo",
                int maxCount = 1 << 14)
    {
       if (initialCount > maxCount)
-         throw std::runtime_error("Attempted to exceed the max particle count during creation");
+         throw std::logic_error("Attempted to exceed the max particle count during creation");
       p_initialTime = high_resolution_clock::now();
       p_maxCount = maxCount;
       p_title = title;
@@ -203,6 +308,18 @@ public:
       gfxInit(width, height);
       bufferInit();
       init();
+      isReady = true;
+   }
+   void Create(int width, int height, string title = "Particulo", int maxCount = 1 << 14)
+   {
+      p_initialTime = high_resolution_clock::now();
+      p_maxCount = maxCount;
+      p_title = title;
+      maxParticleIndex = 0;
+      gfxInit(width, height);
+      bufferInit();
+      init();
+      isReady = true;
    }
 
    void tick()
@@ -211,23 +328,39 @@ public:
       update(particles, timeElapsed);
       commonDraw();
    }
+   void drawTick() { commonDraw(); }
 
    template <typename _Rep, typename _Period>
    void Start(duration<_Rep, _Period> sleepInterval, function<bool()> haltingCondition)
    {
-      while (!haltingCondition()) { loop(sleepInterval); }
+      while (!haltingCondition() && !isClosing) { loop(sleepInterval); }
    }
 
    template <typename _Rep, typename _Period>
    void Start(duration<_Rep, _Period> sleepInterval, function<bool(milliseconds)> haltingCondition)
    {
-      while (!haltingCondition(timeElapsed)) { loop(sleepInterval); }
+      while (!haltingCondition(timeElapsed) && !isClosing) { loop(sleepInterval); }
    }
 
    template <typename _Rep, typename _Period>
    void Start(duration<_Rep, _Period> sleepInterval)
    {
-      while (true) { loop(sleepInterval); }
+      while (!isClosing) { loop(sleepInterval); }
+   }
+
+   void Start(function<bool()> haltingCondition)
+   {
+      while (!haltingCondition() && !isClosing) { loop(); }
+   }
+
+   void Start(function<bool(milliseconds)> haltingCondition)
+   {
+      while (!haltingCondition(timeElapsed) && !isClosing) { loop(); }
+   }
+
+   void Start()
+   {
+      while (!isClosing) { loop(); }
    }
 
 private:
@@ -242,7 +375,7 @@ private:
       screenCorrectionTransform =
           glm::scale(identity, {2.0f / static_cast<float>(p_width),
                                 -2.0f / static_cast<float>(p_height), 1.0f});
-      auto tempMatrix = screenCorrectionTransform * p_transform;
+      tempMatrix = screenCorrectionTransform * p_transform;
       tempMatrix = glm::translate(tempMatrix, {p_width / -2.0f, p_height / -2.0f, 0.0f});
       shader.SetMatrix4("transform", tempMatrix, true);
       setParticlePos();
@@ -360,12 +493,12 @@ private:
       glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, p_maxCount);
    }
 
-private : void gfxInit(int width, int height)
+   void gfxInit(int width, int height)
    {
       p_width = width;
       p_height = height;
       // Try to initialize GLFW
-      if (!glfwInit()) throw std::runtime_error("Unable to initialize GLFW");
+      if (!glfwInit()) throw std::logic_error("Unable to initialize GLFW");
 
       // Try to create a window
       glfwWindowHint(GLFW_SAMPLES, 4);
@@ -374,7 +507,7 @@ private : void gfxInit(int width, int height)
       glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 5);
       glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
       window = glfwCreateWindow(p_width, p_height, p_title.c_str(), NULL, NULL);
-      if (!window) throw std::runtime_error("Unable to create GLFW Window");
+      if (!window) throw std::logic_error("Unable to create GLFW Window");
 
       // Load GL
       glfwMakeContextCurrent(window);
@@ -390,8 +523,13 @@ private : void gfxInit(int width, int height)
       glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
       glEnable(GL_BLEND);
       glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+      glfwSetWindowUserPointer(window, this);
+      glfwSetScrollCallback(window, s_ScrollCallback);
+      glfwSetMouseButtonCallback(window, s_MouseClickCallback);
+      glfwSetWindowCloseCallback(window, s_WindowClose);
+      glfwSetCursorPosCallback(window, s_MouseMoveCallback);
+      glfwSetCharCallback(window, s_KeyboardTypeCallback);
       glfwSwapInterval(1);
-      isReady = true;
    }
 
    void updateBuffers()
@@ -452,12 +590,19 @@ private : void gfxInit(int width, int height)
       glBufferData(GL_ARRAY_BUFFER, p_maxCount * 4 * sizeof(GLubyte), NULL, GL_STREAM_DRAW);
    }
 
-private : template <typename _Rep, typename _Period>
-          void
-          loop(duration<_Rep, _Period> sleepInterval)
+   // void threadInit() { std::thread thread_object(fn_class_object(), params) }
+
+   template <typename _Rep, typename _Period>
+   void loop(duration<_Rep, _Period> sleepInterval)
    {
       tick();
       sleep_for(sleepInterval);
+      timeElapsed = duration_cast<milliseconds>(high_resolution_clock::now() - p_initialTime);
+   }
+
+   void loop()
+   {
+      tick();
       timeElapsed = duration_cast<milliseconds>(high_resolution_clock::now() - p_initialTime);
    }
 };

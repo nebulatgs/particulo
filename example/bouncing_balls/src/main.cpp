@@ -62,6 +62,6 @@ class Example : public Particulo::Particulo<Particle>
 int main()
 {
    auto a = Example();
-   a.Create(1000, 1000, 1000, "Particulo Example", 100000);
+   a.Create(1000, 1000, 1000, "Particulo Example: Bouncing Balls", 100000);
    a.Start(16ms);
 }

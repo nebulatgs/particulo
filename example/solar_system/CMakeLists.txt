@@ -5,7 +5,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 set(SOURCE_FILES src/main.cpp)
 
 add_executable(solar_system ${SOURCE_FILES})
-if (WIN32)
+if (MSVC)
 target_link_options(solar_system PRIVATE "-static-libgcc" "-static-libstdc++")
 endif()
 

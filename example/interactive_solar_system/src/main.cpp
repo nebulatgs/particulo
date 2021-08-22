@@ -22,37 +22,39 @@ static std::mt19937 gen = std::mt19937(device());
 static float constexpr G = 6.6742E-11;
 static float constexpr SizeRatio = 750000.0;
 static float constexpr GCONSTANT = 1.00E3;
-static float constexpr TIMESTEP = 0.0001;
+static float constexpr TIMESTEP = 1;
 
 struct Particle
 {
    Particle(int index) : index(index) {}
    Particle(int index, int width, int height, float mass)
-       : index(index), pos(0, width, 0, height), mass(mass), radius(mass / SizeRatio * 1.0f)
+       : index(index), pos(0, width, 0, height), mass(mass), radius(cbrt(mass))
+   {}
+   Particle(int index, v2d::v2d pos, float mass, bool disabled = true)
+       : index(index), pos(pos), mass(mass), radius(cbrt(mass)), disabled(disabled)
    {}
 
    const int index;
    v2d::v2d pos;
    v2d::v2d vel;
    v2d::v2d force;
-   uint32_t color = 0x00b894ff;
+   uint32_t color = 0x00b894bb;
    float mass;
    float radius;
+   bool disabled = false;
 };
 class Example : public Particulo::Particulo<Particle>
 {
 public:
-   void init() override
-   {
-      SetBGColor(0x222f3eFF);
-      AddParticles();
-   }
+   void init() override { SetBGColor(0x222f3eFF); }
    void simulate(const vector<shared_ptr<Particle>>& particles, milliseconds timeElapsed) override
    {
       for (auto& each : particles)
       {
+         if (each->disabled) { continue; }
          for (auto& particle : particles)
          {
+            if (particle->disabled) { continue; }
             float distance = sqrtf(particle->pos.sqrDist(each->pos));
             if (distance > 4.0)
             {
@@ -73,7 +75,8 @@ public:
          each->pos += each->vel * TIMESTEP;
          each->force = {0, 0};
       }
-      SetTransform(glm::mat4(1.0f) * scale * translation);
+      SetTransform(scale * translation);
+      if (newParticle && rightMouseDown) newParticle->radius += 1.0;
    }
    void onScroll(double x, double y) override
    {
@@ -92,8 +95,19 @@ public:
    void onMouseClick(int button, int action, int mods) override
    {
       auto [x, y] = GetMousePos();
+      auto vec = glm::dvec4(x, y, 1.0, 1.0);
+      vec = glm::affineInverse(translation * scale) * vec;
+      // vec = glm::affineInverse(translation) * vec;
       leftMouseDown = button == 0 && action;
       leftMouseUp = button == 0 && !action;
+      rightMouseDown = button == 1 && action;
+      rightMouseUp = button == 1 && !action;
+      if (rightMouseDown) { newParticle = Add(v2d::v2d(vec.x, vec.y), 1.0); }
+      if (rightMouseUp)
+      {
+         newParticle->mass = newParticle->radius * newParticle->radius * newParticle->radius;
+         newParticle->disabled = false;
+      }
       if (leftMouseUp)
       {
          px = px + ((x - mx)) / sf;
@@ -115,34 +129,26 @@ public:
    }
    void onType(char32_t codepoint) override
    {
-      if (codepoint == 'r')
-      {
-         Clear();
-         AddParticles();
-      }
+      if (codepoint == 'r') { Clear(); }
       if (codepoint == 'f') { ToggleFullscreen(); }
    }
 
 private:
    bool leftMouseDown = false;
    bool leftMouseUp = false;
+   bool rightMouseDown = false;
+   bool rightMouseUp = false;
    double mx, my = 0.0;
    double px, py = 0.0;
    glm::mat4 translation = glm::mat4(1.0f);
    glm::mat4 scale = glm::mat4(1.0f);
    double sf = 1.0;
-
-private:
-   void AddParticles()
-   {
-      std::uniform_real_distribution<float> massDistr(0, SizeRatio);
-      for (int i = 0; i < 1000; i++) { Add(GetWidth(), GetHeight(), massDistr(gen)); }
-   }
+   shared_ptr<Particle> newParticle;
 };
 
 int main()
 {
    auto a = Example();
-   a.Create(1000, 2000, "Particulo Example: Solar System", 10000);
-   a.Start();
+   a.Create(1000, 2000, "Particulo Example: Interactive Solar System", 10000);
+   a.Start(0.5ms);
 }

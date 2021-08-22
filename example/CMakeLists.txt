@@ -20,3 +20,4 @@ include_directories("../src")
 
 add_subdirectory(bouncing_balls)
 add_subdirectory(solar_system)
+add_subdirectory(interactive_solar_system)
