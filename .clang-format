@@ -1,5 +1,5 @@
   
-ColumnLimit: 100
+ColumnLimit: 150
 
 UseTab: Never
 IndentWidth: 3
@@ -14,10 +14,11 @@ BraceWrapping:
   AfterClass: true
   SplitEmptyFunction: false
   AfterControlStatement: true
-  AfterFunction: true
+  # AfterFunction: true
   AfterUnion: true
   BeforeElse: true
 
+BreakBeforeConceptDeclarations: true
 
 AlwaysBreakTemplateDeclarations: true
 BreakConstructorInitializersBeforeComma: true

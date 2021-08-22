@@ -27,12 +27,8 @@ static float constexpr TIMESTEP = 1;
 struct Particle
 {
    Particle(int index) : index(index) {}
-   Particle(int index, int width, int height, float mass)
-       : index(index), pos(0, width, 0, height), mass(mass), radius(cbrt(mass))
-   {}
-   Particle(int index, v2d::v2d pos, float mass, bool disabled = true)
-       : index(index), pos(pos), mass(mass), radius(cbrt(mass)), disabled(disabled)
-   {}
+   Particle(int index, int width, int height, float mass) : index(index), pos(0, width, 0, height), mass(mass), radius(cbrt(mass)) {}
+   Particle(int index, v2d::v2d pos, float mass, bool disabled = true) : index(index), pos(pos), mass(mass), radius(cbrt(mass)), disabled(disabled) {}
 
    const int index;
    v2d::v2d pos;
@@ -43,14 +39,18 @@ struct Particle
    float radius;
    bool disabled = false;
 };
-class Example : public Particulo::Particulo<Particle>
+class Example : public Particulo::Particulo<Particle, 8>
 {
 public:
    void init() override { SetBGColor(0x222f3eFF); }
-   void simulate(const vector<shared_ptr<Particle>>& particles, milliseconds timeElapsed) override
-   {
-      for (auto& each : particles)
+   void simulate(const vector<shared_ptr<Particle>>& particles, milliseconds timeElapsed, int thread) override {
+      if (particles.size() == 0) return;
+      const uint32_t step = particles.size() / 4;
+      const uint32_t start_index = thread * step;
+      const uint32_t end_index = (thread < 4 - 1) ? start_index + step : particles.size() - 1;
+      for (int i = start_index; i < end_index; ++i)
       {
+         auto& each = particles[i];
          if (each->disabled) { continue; }
          for (auto& particle : particles)
          {
@@ -58,8 +58,7 @@ public:
             float distance = sqrtf(particle->pos.sqrDist(each->pos));
             if (distance > 4.0)
             {
-               float pairForce =
-                   ((particle->mass * each->mass) / (GCONSTANT * (distance * distance)));
+               float pairForce = ((particle->mass * each->mass) / (GCONSTANT * (distance * distance)));
                auto F = ((particle->pos - each->pos) / distance) * pairForce;
                each->force += F;
                particle->force -= F;
@@ -67,8 +66,7 @@ public:
          }
       }
    }
-   void update(const vector<shared_ptr<Particle>>& particles, milliseconds timeElapsed) override
-   {
+   void update(const vector<shared_ptr<Particle>>& particles, milliseconds timeElapsed) override {
       for (auto& each : particles)
       {
          each->vel += each->force / each->mass;
@@ -78,8 +76,7 @@ public:
       SetTransform(scale * translation);
       if (newParticle && rightMouseDown) newParticle->radius += 1.0;
    }
-   void onScroll(double x, double y) override
-   {
+   void onScroll(double x, double y) override {
       auto transform = GetTransform();
       if (y > 0)
       {
@@ -92,8 +89,7 @@ public:
          sf *= 0.75;
       }
    }
-   void onMouseClick(int button, int action, int mods) override
-   {
+   void onMouseClick(int button, int action, int mods) override {
       auto [x, y] = GetMousePos();
       auto vec = glm::dvec4(x, y, 1.0, 1.0);
       vec = glm::affineInverse(translation * scale) * vec;
@@ -119,16 +115,10 @@ public:
          my = y;
       }
    }
-   void onMouseMove(double x, double y) override
-   {
-      if (leftMouseDown)
-      {
-         translation =
-             glm::translate(glm::mat4(1.0f), {px + ((x - mx)) / sf, py + ((y - my)) / sf, 0.0f});
-      }
+   void onMouseMove(double x, double y) override {
+      if (leftMouseDown) { translation = glm::translate(glm::mat4(1.0f), {px + ((x - mx)) / sf, py + ((y - my)) / sf, 0.0f}); }
    }
-   void onType(char32_t codepoint) override
-   {
+   void onType(char32_t codepoint) override {
       if (codepoint == 'r') { Clear(); }
       if (codepoint == 'f') { ToggleFullscreen(); }
    }
@@ -146,9 +136,8 @@ private:
    shared_ptr<Particle> newParticle;
 };
 
-int main()
-{
+int main() {
    auto a = Example();
    a.Create(1000, 2000, "Particulo Example: Interactive Solar System", 10000);
-   a.Start(0.5ms);
+   a.Start(8ms, 8ms);
 }

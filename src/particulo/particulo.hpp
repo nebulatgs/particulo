@@ -35,11 +35,16 @@ using std::is_arithmetic_v;
 #include <vector>
 using std::vector;
 
-// #include <thread>
-// using std::thread;
+#include <thread>
+using std::thread;
 
-// #include <mutex>
-// using std::mutex;
+#include <mutex>
+using std::mutex;
+
+#include <shared_mutex>
+using std::shared_lock;
+using std::shared_mutex;
+using std::unique_lock;
 
 #include "shader.hpp"
 #include "v2d.hpp"
@@ -99,21 +104,30 @@ static const string FragmentShader = R"(
 
 // Concepts
 template <typename T>
-concept BasicParticleXY = (is_arithmetic_v<typeof T::index> && is_arithmetic_v<typeof T::x> &&
-                           same_as<typeof T::x, typeof T::y> && same_as<typeof T::radius, float>);
+concept is_arithmetic = is_arithmetic_v<T>;
 
 template <typename T>
-concept BasicParticleV = (same_as<typeof T::pos, v2d::v2d> && same_as<typeof T::radius, float>);
+concept BasicParticleXY = requires(T a) {
+   { a.index } -> is_arithmetic;
+   { a.x } -> is_arithmetic;
+   { a.x } -> same_as<typeof a.y>;
+   { a.radius } -> same_as<float>;
+};
 
 template <typename T>
-concept Particle = (BasicParticleXY<T> || BasicParticleV<T>) &&(constructible_from<T, int> ||
-                                                                constructible_from<T, long>);
+concept BasicParticleV = requires(T a) {
+   { a.pos } -> same_as<v2d::v2d>;
+   { a.radius } -> same_as<float>;
+};
 
 template <typename T>
-concept ColorfulParticle = (Particle<T> && same_as<uint32_t, typeof T::color>);
+concept Particle = (BasicParticleXY<T> || BasicParticleV<T>) &&(constructible_from<int> || constructible_from<long>);
 
 template <typename T>
-concept PlainParticle = (Particle<T> && !ColorfulParticle<T>);
+concept ColorfulParticle = requires(T a) {
+   { a } -> Particle;
+   { a.color } -> same_as<uint32_t>;
+};
 
 // Structs
 struct RGBA
@@ -124,32 +138,27 @@ struct RGBA
    float a;
 };
 // Main
-template <ColorfulParticle T>
+template <ColorfulParticle T, int threadCount = 1>
 class Particulo
 {
 private:
-   static void s_ScrollCallback(GLFWwindow* window, double x, double y)
-   {
+   static void s_ScrollCallback(GLFWwindow* window, double x, double y) {
       auto instance = reinterpret_cast<Particulo*>(glfwGetWindowUserPointer(window));
       instance->onScroll(x, y);
    }
-   static void s_MouseClickCallback(GLFWwindow* window, int button, int action, int mods)
-   {
+   static void s_MouseClickCallback(GLFWwindow* window, int button, int action, int mods) {
       auto instance = reinterpret_cast<Particulo*>(glfwGetWindowUserPointer(window));
       instance->onMouseClick(button, action, mods);
    }
-   static void s_MouseMoveCallback(GLFWwindow* window, double x, double y)
-   {
+   static void s_MouseMoveCallback(GLFWwindow* window, double x, double y) {
       auto instance = reinterpret_cast<Particulo*>(glfwGetWindowUserPointer(window));
       instance->onMouseMove(x, y);
    }
-   static void s_KeyboardTypeCallback(GLFWwindow* window, unsigned int codepoint)
-   {
+   static void s_KeyboardTypeCallback(GLFWwindow* window, unsigned int codepoint) {
       auto instance = reinterpret_cast<Particulo*>(glfwGetWindowUserPointer(window));
       instance->onType(codepoint);
    }
-   static void s_WindowClose(GLFWwindow* window)
-   {
+   static void s_WindowClose(GLFWwindow* window) {
       auto instance = reinterpret_cast<Particulo*>(glfwGetWindowUserPointer(window));
       instance->isClosing = true;
       instance->onClose();
@@ -171,34 +180,22 @@ protected:
    const float GetHeight() const { return p_height; }
    const float GetMaxCount() const { return p_maxCount; }
    const time_point& GetInitialTime() const { return p_initialTime; }
-   const std::tuple<double, double> GetMousePos() const
-   {
+   const std::tuple<double, double> GetMousePos() const {
       double x, y;
       glfwGetCursorPos(window, &x, &y);
       return {x, y};
    }
    const bool GetFullscreenState() const { return p_fullscreen; }
-   // const std::tuple<double, double> GetTransformedMousePos() const
-   // {
-   //    double x, y;
-   //    glfwGetCursorPos(window, &x, &y);
-   //    auto transformedCoords = p_transform * glm::dvec4(x, y, 1.0, 1.0);
-   //    cout << transformedCoords.x << " " << transformedCoords.y << " " << transformedCoords.z <<
-   //    " "
-   //         << transformedCoords.w << endl;
-   //    return {transformedCoords.x, transformedCoords.y};
-   // }
 
 protected:
-   void SetTitle(string title)
-   {
+   void SetTitle(string title) {
       p_title = title;
       glfwSetWindowTitle(window, title.c_str());
    }
    void SetTransform(glm::mat4 transform) { p_transform = transform; }
    template <typename... _Args>
-   shared_ptr<T> Add(_Args&&... __args)
-   {
+   shared_ptr<T> Add(_Args&&... __args) {
+      unique_lock lock(mtx);
       if (particles.size() >= p_maxCount)
       {
          throw std::logic_error("Attempted to exceed the max particle count in instance method "
@@ -208,10 +205,17 @@ protected:
       particles.push_back(particle);
       return particle;
    }
-   void Remove() { particles.pop_back(); }
-   void Remove(int i) { particles.erase(particles.front() + i); }
-   void Clear()
-   {
+   void Remove() {
+      unique_lock lock(mtx);
+      particles.pop_back();
+   }
+   void Remove(int i) {
+      unique_lock lock(mtx);
+      particles.erase(particles.front() + i);
+   }
+   void Clear() {
+      unique_lock lock(mtx);
+      cout << "Removing " << particles.size() << " particles" << endl;
       particles.clear();
       std::fill(particle_position_size_data.begin(), particle_position_size_data.end(), 0);
       std::fill(particle_color_data.begin(), particle_color_data.end(), 0);
@@ -247,21 +251,20 @@ private:
    glm::mat4 tempMatrix = glm::mat4(1.0f);
    bool isClosing = false;
 
-   // private:
-   //    thread drawThread;
-   //    mutex drawMutex;
+private:
+   vector<thread> simThreads;
+   mutable shared_mutex mtx;
 
 public:
    virtual void init() {}
-   virtual void simulate(const vector<shared_ptr<T>>& particles, milliseconds timeElapsed) = 0;
+   virtual void simulate(const vector<shared_ptr<T>>& particles, milliseconds timeElapsed, int thread) = 0;
    virtual void update(const vector<shared_ptr<T>>& particles, milliseconds timeElapsed){};
    virtual ~Particulo(){};
 
 public:
    void SetBGColor(float r, float g, float b, float a = 1.0f) { bgColor = {r, g, b, a}; }
    void SetBGColor(RGBA color) { bgColor = color; }
-   void SetBGColor(uint32_t color)
-   {
+   void SetBGColor(uint32_t color) {
       auto [r, g, b, a] = uint32ToFloatColor(color);
       bgColor = {
           r,
@@ -270,36 +273,27 @@ public:
           a,
       };
    }
-   void DisableCursor()
-   {
+   void DisableCursor() {
       if (!isReady) { throw std::logic_error("Cannot disable cursor before initialization"); }
       glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
    }
-   void EnableCursor()
-   {
+   void EnableCursor() {
       if (!isReady) { throw std::logic_error("Cannot enable cursor before initialization"); }
       glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
    }
-   void ToggleFullscreen()
-   {
+   void ToggleFullscreen() {
       if (!p_fullscreen)
       {
          auto* monitor = glfwGetPrimaryMonitor();
          auto* vidMode = glfwGetVideoMode(monitor);
-         glfwSetWindowMonitor(window, monitor, 0, 0, vidMode->width, vidMode->height,
-                              GLFW_DONT_CARE);
+         glfwSetWindowMonitor(window, monitor, 0, 0, vidMode->width, vidMode->height, GLFW_DONT_CARE);
       }
       else
-      {
-         glfwSetWindowMonitor(window, nullptr, 0, 0, 0, 0, GLFW_DONT_CARE);
-      }
+      { glfwSetWindowMonitor(window, nullptr, 0, 0, 0, 0, GLFW_DONT_CARE); }
       p_fullscreen = !p_fullscreen;
    }
-   void Create(int width, int height, int initialCount, string title = "Particulo",
-               int maxCount = 1 << 14)
-   {
-      if (initialCount > maxCount)
-         throw std::logic_error("Attempted to exceed the max particle count during creation");
+   void Create(int width, int height, int initialCount, string title = "Particulo", int maxCount = 1 << 14) {
+      if (initialCount > maxCount) throw std::logic_error("Attempted to exceed the max particle count during creation");
       p_initialTime = high_resolution_clock::now();
       p_maxCount = maxCount;
       p_title = title;
@@ -310,8 +304,7 @@ public:
       init();
       isReady = true;
    }
-   void Create(int width, int height, string title = "Particulo", int maxCount = 1 << 14)
-   {
+   void Create(int width, int height, string title = "Particulo", int maxCount = 1 << 14) {
       p_initialTime = high_resolution_clock::now();
       p_maxCount = maxCount;
       p_title = title;
@@ -322,59 +315,66 @@ public:
       isReady = true;
    }
 
-   void tick()
-   {
-      simulate(particles, timeElapsed);
-      update(particles, timeElapsed);
-      commonDraw();
-   }
-   void drawTick() { commonDraw(); }
+   void tick() { commonDraw(); }
 
-   template <typename _Rep, typename _Period>
-   void Start(duration<_Rep, _Period> sleepInterval, function<bool()> haltingCondition)
-   {
-      while (!haltingCondition() && !isClosing) { loop(sleepInterval); }
+   template <typename _DrawRep, typename _DrawPeriod, typename _SimRep, typename _SimPeriod>
+   void Start(duration<_DrawRep, _DrawPeriod> drawSleepInterval, duration<_SimRep, _SimPeriod> simSleepInterval, function<bool()> haltingCondition) {
+      startThreads(simSleepInterval, haltingCondition);
+      while (!haltingCondition() && !isClosing) { loop(drawSleepInterval); }
    }
 
-   template <typename _Rep, typename _Period>
-   void Start(duration<_Rep, _Period> sleepInterval, function<bool(milliseconds)> haltingCondition)
-   {
-      while (!haltingCondition(timeElapsed) && !isClosing) { loop(sleepInterval); }
+   template <typename _DrawRep, typename _DrawPeriod, typename _SimRep, typename _SimPeriod>
+   void Start(duration<_DrawRep, _DrawPeriod> drawSleepInterval, duration<_SimRep, _SimPeriod> simSleepInterval,
+              function<bool(milliseconds)> haltingCondition) {
+      startThreads(simSleepInterval, haltingCondition);
+      while (!haltingCondition(timeElapsed) && !isClosing) { loop(drawSleepInterval); }
    }
 
-   template <typename _Rep, typename _Period>
-   void Start(duration<_Rep, _Period> sleepInterval)
-   {
-      while (!isClosing) { loop(sleepInterval); }
-   }
-
-   void Start(function<bool()> haltingCondition)
-   {
-      while (!haltingCondition() && !isClosing) { loop(); }
-   }
-
-   void Start(function<bool(milliseconds)> haltingCondition)
-   {
-      while (!haltingCondition(timeElapsed) && !isClosing) { loop(); }
-   }
-
-   void Start()
-   {
-      while (!isClosing) { loop(); }
+   template <typename _DrawRep, typename _DrawPeriod, typename _SimRep, typename _SimPeriod>
+   void Start(duration<_DrawRep, _DrawPeriod> drawSleepInterval, duration<_SimRep, _SimPeriod> simSleepInterval) {
+      startThreads(simSleepInterval);
+      while (!isClosing) { loop(drawSleepInterval); }
    }
 
 private:
-   void commonDraw()
-   {
+   template <typename _Rep, typename _Period>
+   void simLoop(int thread, duration<_Rep, _Period> sleepInterval, function<bool()> haltingCondition) {
+      while (!haltingCondition() && !isClosing)
+      {
+         simulate(particles, timeElapsed, thread);
+         if (thread == 0) update(particles, timeElapsed);
+         if (sleepInterval.count() > 0) sleep_for(sleepInterval);
+      }
+   }
+
+   template <typename _Rep, typename _Period>
+   void simLoop(int thread, duration<_Rep, _Period> sleepInterval, function<bool(milliseconds)> haltingCondition) {
+      while (!haltingCondition(timeElapsed) && !isClosing)
+      {
+         simulate(particles, timeElapsed, thread);
+         if (thread == 0) update(particles, timeElapsed);
+         if (sleepInterval.count() > 0) sleep_for(sleepInterval);
+      }
+   }
+
+   template <typename _Rep, typename _Period>
+   void simLoop(int thread, duration<_Rep, _Period> sleepInterval) {
+      while (!isClosing)
+      {
+         simulate(particles, timeElapsed, thread);
+         if (thread == 0) update(particles, timeElapsed);
+         if (sleepInterval.count() > 0) sleep_for(sleepInterval);
+      }
+   }
+
+   void commonDraw() {
       glfwPollEvents();
       glClearColor(bgColor.r, bgColor.g, bgColor.b, bgColor.a);
       glClear(GL_COLOR_BUFFER_BIT);
       glfwGetFramebufferSize(window, &p_width, &p_height);
       glViewport(0, 0, p_width, p_height);
       glOrtho(0, p_width, p_height, 0, 1, -1);
-      screenCorrectionTransform =
-          glm::scale(identity, {2.0f / static_cast<float>(p_width),
-                                -2.0f / static_cast<float>(p_height), 1.0f});
+      screenCorrectionTransform = glm::scale(identity, {2.0f / static_cast<float>(p_width), -2.0f / static_cast<float>(p_height), 1.0f});
       tempMatrix = screenCorrectionTransform * p_transform;
       tempMatrix = glm::translate(tempMatrix, {p_width / -2.0f, p_height / -2.0f, 0.0f});
       shader.SetMatrix4("transform", tempMatrix, true);
@@ -384,8 +384,7 @@ private:
       glfwSwapBuffers(window);
    }
 
-   static std::tuple<float, float, float, float> uint32ToFloatColor(uint32_t color)
-   {
+   static std::tuple<float, float, float, float> uint32ToFloatColor(uint32_t color) {
       union
       {
          uint32_t hex;
@@ -406,8 +405,7 @@ private:
       };
    }
 
-   void setParticlePos() requires(BasicParticleXY<T>)
-   {
+   void setParticlePos() requires(BasicParticleXY<T>) {
       int i = 0;
       for (auto& particle : particles)
       {
@@ -426,8 +424,7 @@ private:
       }
    }
 
-   void setParticlePos() requires(BasicParticleV<T>)
-   {
+   void setParticlePos() requires(BasicParticleV<T>) {
       int i = 0;
       for (auto& particle : particles)
       {
@@ -446,43 +443,39 @@ private:
       }
    }
 
-   void draw() requires(ColorfulParticle<T>)
-   {
+   void draw() requires(ColorfulParticle<T>) {
       // 1st attribute buffer : vertices
       glEnableVertexAttribArray(0);
       glBindBuffer(GL_ARRAY_BUFFER, billboard_vertex_buffer);
-      glVertexAttribPointer(
-          0, // attribute. No particular reason for 0, but must match the layout in the shader.
-          3, // size
-          GL_FLOAT, // type
-          GL_FALSE, // normalized?
-          0,        // stride
-          (void*) 0 // array buffer offset
+      glVertexAttribPointer(0,        // attribute. No particular reason for 0, but must match the layout in the shader.
+                            3,        // size
+                            GL_FLOAT, // type
+                            GL_FALSE, // normalized?
+                            0,        // stride
+                            (void*) 0 // array buffer offset
       );
 
       // 2nd attribute buffer : positions of particles' centers
       glEnableVertexAttribArray(1);
       glBindBuffer(GL_ARRAY_BUFFER, particles_position_buffer);
-      glVertexAttribPointer(
-          1, // attribute. No particular reason for 1, but must match the layout in the shader.
-          4, // size : x + y + z + size => 4
-          GL_FLOAT, // type
-          GL_FALSE, // normalized?
-          0,        // stride
-          (void*) 0 // array buffer offset
+      glVertexAttribPointer(1,        // attribute. No particular reason for 1, but must match the layout in the shader.
+                            4,        // size : x + y + z + size => 4
+                            GL_FLOAT, // type
+                            GL_FALSE, // normalized?
+                            0,        // stride
+                            (void*) 0 // array buffer offset
       );
 
       // 3rd attribute buffer : particles' colors
       glEnableVertexAttribArray(2);
       glBindBuffer(GL_ARRAY_BUFFER, particles_color_buffer);
-      glVertexAttribPointer(
-          2, // attribute. No particular reason for 2, but must match the layout in the shader.
-          4, // size : r + g + b + a => 4
-          GL_FLOAT, // type
-          GL_TRUE,  // normalized? *** YES, this means that the unsigned char[4] will be accessible
-                    // with a vec4 (floats) in the shader ***
-          0,        // stride
-          (void*) 0 // array buffer offset
+      glVertexAttribPointer(2,        // attribute. No particular reason for 2, but must match the layout in the shader.
+                            4,        // size : r + g + b + a => 4
+                            GL_FLOAT, // type
+                            GL_TRUE,  // normalized? *** YES, this means that the unsigned char[4] will be accessible
+                                      // with a vec4 (floats) in the shader ***
+                            0,        // stride
+                            (void*) 0 // array buffer offset
       );
 
       // cout << glVertexAttribDivisor << endl;
@@ -493,8 +486,7 @@ private:
       glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, p_maxCount);
    }
 
-   void gfxInit(int width, int height)
-   {
+   void gfxInit(int width, int height) {
       p_width = width;
       p_height = height;
       // Try to initialize GLFW
@@ -532,25 +524,21 @@ private:
       glfwSwapInterval(1);
    }
 
-   void updateBuffers()
-   {
+   void updateBuffers() {
       glBindBuffer(GL_ARRAY_BUFFER, particles_position_buffer);
       glBufferData(GL_ARRAY_BUFFER, p_maxCount * 4 * sizeof(GLfloat), NULL,
                    GL_STREAM_DRAW); // Buffer orphaning, a common way to improve streaming perf. See
                                     // above link for details.
-      glBufferSubData(GL_ARRAY_BUFFER, 0, p_maxCount * sizeof(GLfloat) * 4,
-                      particle_position_size_data.data());
+      glBufferSubData(GL_ARRAY_BUFFER, 0, p_maxCount * sizeof(GLfloat) * 4, particle_position_size_data.data());
 
       glBindBuffer(GL_ARRAY_BUFFER, particles_color_buffer);
       glBufferData(GL_ARRAY_BUFFER, p_maxCount * 4 * sizeof(GLfloat), NULL,
                    GL_STREAM_DRAW); // Buffer orphaning, a common way to improve streaming perf. See
                                     // above link for details.
-      glBufferSubData(GL_ARRAY_BUFFER, 0, p_maxCount * sizeof(GLfloat) * 4,
-                      particle_color_data.data());
+      glBufferSubData(GL_ARRAY_BUFFER, 0, p_maxCount * sizeof(GLfloat) * 4, particle_color_data.data());
    }
 
-   void bufferInit() requires(ColorfulParticle<T>)
-   {
+   void bufferInit() requires(ColorfulParticle<T>) {
       particle_position_size_data.resize(p_maxCount * 4);
       particle_color_data.resize(p_maxCount * 4);
       particles.reserve(p_maxCount);
@@ -590,19 +578,34 @@ private:
       glBufferData(GL_ARRAY_BUFFER, p_maxCount * 4 * sizeof(GLubyte), NULL, GL_STREAM_DRAW);
    }
 
-   // void threadInit() { std::thread thread_object(fn_class_object(), params) }
-
    template <typename _Rep, typename _Period>
-   void loop(duration<_Rep, _Period> sleepInterval)
-   {
-      tick();
-      sleep_for(sleepInterval);
-      timeElapsed = duration_cast<milliseconds>(high_resolution_clock::now() - p_initialTime);
+   void startThreads(duration<_Rep, _Period> sleepInterval, function<bool()> haltingCondition) {
+      for (int i = 0; i < threadCount; i++)
+      {
+         simThreads.emplace_back([this, sleepInterval, &haltingCondition, i] { simLoop(i, sleepInterval, haltingCondition); });
+      }
    }
 
-   void loop()
-   {
+   template <typename _Rep, typename _Period>
+   void startThreads(duration<_Rep, _Period> sleepInterval, function<bool(milliseconds)> haltingCondition) {
+      for (int i = 0; i < threadCount; i++)
+      {
+         simThreads.emplace_back([this, sleepInterval, &haltingCondition, i] { simLoop(i, sleepInterval, haltingCondition); });
+      }
+   }
+
+   template <typename _Rep, typename _Period>
+   void startThreads(duration<_Rep, _Period> sleepInterval) {
+      for (int i = 0; i < threadCount; i++)
+      {
+         simThreads.emplace_back([this, sleepInterval, i] { simLoop(i, sleepInterval); });
+      }
+   }
+
+   template <typename _Rep, typename _Period>
+   void loop(duration<_Rep, _Period> sleepInterval) {
       tick();
+      sleep_for(sleepInterval);
       timeElapsed = duration_cast<milliseconds>(high_resolution_clock::now() - p_initialTime);
    }
 };

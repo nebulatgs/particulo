@@ -27,9 +27,7 @@ static float constexpr TIMESTEP = 0.0001;
 struct Particle
 {
    Particle(int index) : index(index) {}
-   Particle(int index, int width, int height, float mass)
-       : index(index), pos(0, width, 0, height), mass(mass), radius(mass / SizeRatio * 1.0f)
-   {}
+   Particle(int index, int width, int height, float mass) : index(index), pos(0, width, 0, height), mass(mass), radius(mass / SizeRatio * 1.0f) {}
 
    const int index;
    v2d::v2d pos;
@@ -39,25 +37,26 @@ struct Particle
    float mass;
    float radius;
 };
-class Example : public Particulo::Particulo<Particle>
+class Example : public Particulo::Particulo<Particle, 8>
 {
 public:
-   void init() override
-   {
+   void init() override {
       SetBGColor(0x222f3eFF);
       AddParticles();
    }
-   void simulate(const vector<shared_ptr<Particle>>& particles, milliseconds timeElapsed) override
-   {
-      for (auto& each : particles)
+   void simulate(const vector<shared_ptr<Particle>>& particles, milliseconds timeElapsed, int thread) override {
+      const uint32_t step = particles.size() / 16;
+      const uint32_t start_index = thread * step;
+      const uint32_t end_index = (thread < 16 - 1) ? start_index + step : particles.size() - 1;
+      for (int i = start_index; i < end_index; ++i)
       {
+         auto& each = particles[i];
          for (auto& particle : particles)
          {
             float distance = sqrtf(particle->pos.sqrDist(each->pos));
             if (distance > 4.0)
             {
-               float pairForce =
-                   ((particle->mass * each->mass) / (GCONSTANT * (distance * distance)));
+               float pairForce = ((particle->mass * each->mass) / (GCONSTANT * (distance * distance)));
                auto F = ((particle->pos - each->pos) / distance) * pairForce;
                each->force += F;
                particle->force -= F;
@@ -65,8 +64,7 @@ public:
          }
       }
    }
-   void update(const vector<shared_ptr<Particle>>& particles, milliseconds timeElapsed) override
-   {
+   void update(const vector<shared_ptr<Particle>>& particles, milliseconds timeElapsed) override {
       for (auto& each : particles)
       {
          each->vel += each->force / each->mass;
@@ -75,8 +73,7 @@ public:
       }
       SetTransform(glm::mat4(1.0f) * scale * translation);
    }
-   void onScroll(double x, double y) override
-   {
+   void onScroll(double x, double y) override {
       auto transform = GetTransform();
       if (y > 0)
       {
@@ -89,8 +86,7 @@ public:
          sf *= 0.75;
       }
    }
-   void onMouseClick(int button, int action, int mods) override
-   {
+   void onMouseClick(int button, int action, int mods) override {
       auto [x, y] = GetMousePos();
       leftMouseDown = button == 0 && action;
       leftMouseUp = button == 0 && !action;
@@ -105,16 +101,10 @@ public:
          my = y;
       }
    }
-   void onMouseMove(double x, double y) override
-   {
-      if (leftMouseDown)
-      {
-         translation =
-             glm::translate(glm::mat4(1.0f), {px + ((x - mx)) / sf, py + ((y - my)) / sf, 0.0f});
-      }
+   void onMouseMove(double x, double y) override {
+      if (leftMouseDown) { translation = glm::translate(glm::mat4(1.0f), {px + ((x - mx)) / sf, py + ((y - my)) / sf, 0.0f}); }
    }
-   void onType(char32_t codepoint) override
-   {
+   void onType(char32_t codepoint) override {
       if (codepoint == 'r')
       {
          Clear();
@@ -133,16 +123,14 @@ private:
    double sf = 1.0;
 
 private:
-   void AddParticles()
-   {
+   void AddParticles() {
       std::uniform_real_distribution<float> massDistr(0, SizeRatio);
       for (int i = 0; i < 1000; i++) { Add(GetWidth(), GetHeight(), massDistr(gen)); }
    }
 };
 
-int main()
-{
+int main() {
    auto a = Example();
    a.Create(1000, 2000, "Particulo Example: Solar System", 10000);
-   a.Start();
+   a.Start(8ms, 0ms);
 }
