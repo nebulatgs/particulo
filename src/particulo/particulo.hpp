@@ -316,6 +316,7 @@ public:
       gfxInit(width, height);
       bufferInit();
       init();
+      glfwMakeContextCurrent(NULL);
       isReady = true;
    }
    void Create(int width, int height, string title = "Particulo", int maxCount = 1 << 14) {
