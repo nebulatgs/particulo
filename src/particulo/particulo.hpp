@@ -262,6 +262,7 @@ private:
    vector<thread> simThreads;
    thread drawThread;
    mutable shared_mutex mtx;
+   bool swapInterval = false;
 
 public:
    virtual void init() {}
@@ -297,12 +298,12 @@ public:
          auto* monitor = glfwGetPrimaryMonitor();
          auto* vidMode = glfwGetVideoMode(monitor);
          glfwSetWindowMonitor(window, monitor, 0, 0, vidMode->width, vidMode->height, GLFW_DONT_CARE);
-         glfwSwapInterval(1);
+         swapInterval = true;
       }
       else
       {
          glfwSetWindowMonitor(window, nullptr, wPosX, wPosY, wSizeX, wSizeY, GLFW_DONT_CARE);
-         glfwSwapInterval(1);
+         swapInterval = true;
       }
       p_fullscreen = !p_fullscreen;
    }
@@ -643,6 +644,11 @@ private:
 
    template <typename _Rep, typename _Period>
    void loop(duration<_Rep, _Period> sleepInterval) {
+      if (swapInterval)
+      {
+         swapInterval = false;
+         glfwSwapInterval(1);
+      }
       tick();
       sleep_for(sleepInterval);
    }
