@@ -381,8 +381,10 @@ private:
    void simLoop(int thread, duration<_Rep, _Period> sleepInterval) {
       while (!isClosing)
       {
+         mtx.lock();
          simulate(particles, timeElapsed, thread);
-         if (thread == 0) update(particles, timeElapsed);
+         if (thread == 0) { update(particles, timeElapsed); }
+         mtx.unlock();
          if (sleepInterval.count() > 0) sleep_for(sleepInterval);
       }
    }
@@ -646,19 +648,25 @@ private:
    void loop(duration<_Rep, _Period> sleepInterval) {
       if (swapInterval)
       {
+         mtx.lock();
          swapInterval = false;
          glfwSwapInterval(1);
+         mtx.unlock();
       }
+      mtx.lock_shared();
       tick();
+      mtx.unlock_shared();
       sleep_for(sleepInterval);
    }
 
    template <typename _Rep, typename _Period>
    void mainThreadLoop(duration<_Rep, _Period> sleepInterval) {
       glfwPollEvents();
+      mtx.lock();
       glfwGetFramebufferSize(window, &p_width, &p_height);
-      sleep_for(sleepInterval);
       timeElapsed = duration_cast<milliseconds>(high_resolution_clock::now() - p_initialTime);
+      mtx.unlock();
+      sleep_for(sleepInterval);
    }
 };
 } // namespace Particulo

@@ -92,17 +92,17 @@ public:
       leftMouseUp = button == 0 && !action;
       if (leftMouseUp)
       {
-         px = px + ((x - mx)) / sf;
-         py = py + ((y - my)) / sf;
+         px = px + ((x - lmx)) / sf;
+         py = py + ((y - lmy)) / sf;
       }
       if (leftMouseDown)
       {
-         mx = x;
-         my = y;
+         lmx = x;
+         lmy = y;
       }
    }
    void onMouseMove(double x, double y) override {
-      if (leftMouseDown) { translation = glm::translate(glm::mat4(1.0f), {px + ((x - mx)) / sf, py + ((y - my)) / sf, 0.0f}); }
+      if (leftMouseDown) { translation = glm::translate(glm::mat4(1.0f), {px + ((x - lmx)) / sf, py + ((y - lmy)) / sf, 0.0f}); }
    }
    void onType(char32_t codepoint) override {
       if (codepoint == 'r')
@@ -122,7 +122,7 @@ public:
 private:
    bool leftMouseDown = false;
    bool leftMouseUp = false;
-   double mx, my = 0.0;
+   double lmx, lmy = 0.0;
    double px, py = 0.0;
    glm::mat4 translation = glm::mat4(1.0f);
    glm::mat4 scale = glm::mat4(1.0f);

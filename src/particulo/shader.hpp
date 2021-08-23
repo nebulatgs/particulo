@@ -17,21 +17,18 @@ namespace Particulo
 struct Shader
 {
    unsigned int ID;
-   Shader& Use()
-   {
+   Shader& Use() {
       glUseProgram(this->ID);
       return *this;
    }
 
-   const string ReadFile(const string& filename)
-   {
+   const string ReadFile(const string& filename) {
       ifstream input_file(filename);
       if (!input_file.is_open()) throw "Unable to open file " + filename;
       return string((istreambuf_iterator<char>(input_file)), istreambuf_iterator<char>());
    }
 
-   void CompileStrings(const string& vertexShader, const string& fragmentShader)
-   {
+   void CompileStrings(const string& vertexShader, const string& fragmentShader) {
       // Create the shaders
       GLuint VertexShaderID = glCreateShader(GL_VERTEX_SHADER);
       GLuint FragmentShaderID = glCreateShader(GL_FRAGMENT_SHADER);
@@ -97,8 +94,7 @@ struct Shader
       ID = ProgramID;
    }
 
-   void Compile(const char* vertex_file_path, const char* fragment_file_path)
-   {
+   void Compile(const char* vertex_file_path, const char* fragment_file_path) {
 
       // Create the shaders
       GLuint VertexShaderID = glCreateShader(GL_VERTEX_SHADER);
@@ -116,10 +112,9 @@ struct Shader
       }
       else
       {
-         printf(
-             "Impossible to open %s. Are you in the right directory ? Don't forget to read the FAQ "
-             "!\n",
-             vertex_file_path);
+         printf("Impossible to open %s. Are you in the right directory ? Don't forget to read the FAQ "
+                "!\n",
+                vertex_file_path);
          getchar();
          return;
       }
@@ -136,10 +131,9 @@ struct Shader
       }
       else
       {
-         printf(
-             "Impossible to open %s. Are you in the right directory ? Don't forget to read the FAQ "
-             "!\n",
-             vertex_file_path);
+         printf("Impossible to open %s. Are you in the right directory ? Don't forget to read the FAQ "
+                "!\n",
+                vertex_file_path);
          getchar();
          return;
       }
@@ -205,54 +199,44 @@ struct Shader
       ID = ProgramID;
    }
 
-   void SetFloat(const char* name, float value, bool useShader)
-   {
+   void SetFloat(const char* name, float value, bool useShader) {
       if (useShader) this->Use();
       glUniform1f(glGetUniformLocation(this->ID, name), value);
    }
-   void SetInteger(const char* name, int value, bool useShader)
-   {
+   void SetInteger(const char* name, int value, bool useShader) {
       if (useShader) this->Use();
       glUniform1i(glGetUniformLocation(this->ID, name), value);
    }
-   void SetVector2f(const char* name, float x, float y, bool useShader)
-   {
+   void SetVector2f(const char* name, float x, float y, bool useShader) {
       if (useShader) this->Use();
       glUniform2f(glGetUniformLocation(this->ID, name), x, y);
    }
-   void SetVector2f(const char* name, const glm::vec2& value, bool useShader)
-   {
+   void SetVector2f(const char* name, const glm::vec2& value, bool useShader) {
       if (useShader) this->Use();
       glUniform2f(glGetUniformLocation(this->ID, name), value.x, value.y);
    }
-   void SetVector3f(const char* name, float x, float y, float z, bool useShader)
-   {
+   void SetVector3f(const char* name, float x, float y, float z, bool useShader) {
       if (useShader) this->Use();
       glUniform3f(glGetUniformLocation(this->ID, name), x, y, z);
    }
-   void SetVector3f(const char* name, const glm::vec3& value, bool useShader)
-   {
+   void SetVector3f(const char* name, const glm::vec3& value, bool useShader) {
       if (useShader) this->Use();
       glUniform3f(glGetUniformLocation(this->ID, name), value.x, value.y, value.z);
    }
-   void SetVector4f(const char* name, float x, float y, float z, float w, bool useShader)
-   {
+   void SetVector4f(const char* name, float x, float y, float z, float w, bool useShader) {
       if (useShader) this->Use();
       glUniform4f(glGetUniformLocation(this->ID, name), x, y, z, w);
    }
-   void SetVector4f(const char* name, const glm::vec4& value, bool useShader)
-   {
+   void SetVector4f(const char* name, const glm::vec4& value, bool useShader) {
       if (useShader) this->Use();
       glUniform4f(glGetUniformLocation(this->ID, name), value.x, value.y, value.z, value.w);
    }
-   void SetMatrix4(const char* name, const glm::mat4& matrix, bool useShader)
-   {
+   void SetMatrix4(const char* name, const glm::mat4& matrix, bool useShader) {
       if (useShader) this->Use();
       glUniformMatrix4fv(glGetUniformLocation(this->ID, name), 1, false, glm::value_ptr(matrix));
    }
 
-   void checkCompileErrors(unsigned int object, std::string type)
-   {
+   void checkCompileErrors(unsigned int object, std::string type) {
       int success;
       char infoLog[1024];
       if (type != "PROGRAM")
@@ -262,8 +246,7 @@ struct Shader
          {
             glGetShaderInfoLog(object, 1024, NULL, infoLog);
             std::cout << "| ERROR::SHADER: Compile-time error: Type: " << type << "\n"
-                      << infoLog << "\n -- --------------------------------------------------- -- "
-                      << std::endl;
+                      << infoLog << "\n -- --------------------------------------------------- -- " << std::endl;
          }
       }
       else
@@ -273,8 +256,7 @@ struct Shader
          {
             glGetProgramInfoLog(object, 1024, NULL, infoLog);
             std::cout << "| ERROR::Shader: Link-time error: Type: " << type << "\n"
-                      << infoLog << "\n -- --------------------------------------------------- -- "
-                      << std::endl;
+                      << infoLog << "\n -- --------------------------------------------------- -- " << std::endl;
          }
       }
    }

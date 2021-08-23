@@ -44,7 +44,7 @@ class Example : public Particulo::Particulo<Particle, 8>
 public:
    void init() override { SetBGColor(0x222f3eFF); }
    void simulate(const vector<shared_ptr<Particle>>& particles, milliseconds timeElapsed, int thread) override {
-      if (particles.size() == 0) return;
+      if (particles.size() == 0 || paused) return;
       const uint32_t step = particles.size() / 4;
       const uint32_t start_index = thread * step;
       const uint32_t end_index = (thread < 4 - 1) ? start_index + step : particles.size() - 1;
@@ -67,14 +67,18 @@ public:
       }
    }
    void update(const vector<shared_ptr<Particle>>& particles, milliseconds timeElapsed) override {
-      for (auto& each : particles)
+      if (!paused)
       {
-         each->vel += each->force / each->mass;
-         each->pos += each->vel * TIMESTEP;
-         each->force = {0, 0};
+         for (auto& each : particles)
+         {
+            if (each->disabled) { continue; }
+            each->vel += each->force / each->mass;
+            each->pos += each->vel * TIMESTEP;
+            each->force = {0, 0};
+         }
       }
-      SetTransform(scale * translation);
       if (newParticle && rightMouseDown) newParticle->radius += 1.0;
+      SetTransform(scale * translation);
    }
    void onScroll(double x, double y) override {
       auto transform = GetTransform();
@@ -106,17 +110,27 @@ public:
       }
       if (leftMouseUp)
       {
-         px = px + ((x - mx)) / sf;
-         py = py + ((y - my)) / sf;
+         px = px + ((x - lmx)) / sf;
+         py = py + ((y - lmy)) / sf;
       }
       if (leftMouseDown)
       {
-         mx = x;
-         my = y;
+         lmx = x;
+         lmy = y;
+      }
+      if (rightMouseDown)
+      {
+         rmx = x;
+         rmy = y;
       }
    }
    void onMouseMove(double x, double y) override {
-      if (leftMouseDown) { translation = glm::translate(glm::mat4(1.0f), {px + ((x - mx)) / sf, py + ((y - my)) / sf, 0.0f}); }
+      if (leftMouseDown) { translation = glm::translate(glm::mat4(1.0f), {px + ((x - lmx)) / sf, py + ((y - lmy)) / sf, 0.0f}); }
+      if (rightMouseDown)
+      {
+         newParticle->vel.set((x - rmx) / sf, (y - rmy) / sf);
+         newParticle->vel /= -50.0f;
+      }
    }
    void onType(char32_t codepoint) override {
       if (codepoint == 'r') { Clear(); }
@@ -126,6 +140,7 @@ public:
       if (action)
       {
          if (key == GLFW_KEY_F11) { ToggleFullscreen(); }
+         if (key == GLFW_KEY_SPACE) { paused = !paused; }
       }
    }
 
@@ -134,7 +149,8 @@ private:
    bool leftMouseUp = false;
    bool rightMouseDown = false;
    bool rightMouseUp = false;
-   double mx, my = 0.0;
+   bool paused = false;
+   double lmx, lmy, rmx, rmy = 0.0;
    double px, py = 0.0;
    glm::mat4 translation = glm::mat4(1.0f);
    glm::mat4 scale = glm::mat4(1.0f);
