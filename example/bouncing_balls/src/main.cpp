@@ -23,8 +23,8 @@ struct Particle
    Particle(int index, int width, int height) : index(index), pos(0, width, 0, height) {}
    const int index;
    v2d::v2d pos = v2d::v2d(0, 100, 0, 100);
-   v2d::v2d vel = v2d::v2d(0, 10, 0, 10);
-   v2d::v2d acc = v2d::v2d(0, 10, 0, 10);
+   v2d::v2d vel = v2d::v2d(0, 1, 0, 1);
+   v2d::v2d acc = v2d::v2d(0, 1, 0, 1);
    uint32_t color = 0xbf44fcff;
    float radius = 5.0f;
 };
@@ -47,5 +47,5 @@ class Example : public Particulo::Particulo<Particle>
 int main() {
    auto a = Example();
    a.Create(1000, 1000, 1000, "Particulo Example: Bouncing Balls", 100000);
-   a.Start(8ms, 8ms);
+   a.Start(8ms, 1ms);
 }
