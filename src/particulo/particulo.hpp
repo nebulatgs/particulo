@@ -260,6 +260,7 @@ private:
 
 private:
    vector<thread> simThreads;
+   thread drawThread;
    mutable shared_mutex mtx;
 
 public:
@@ -325,6 +326,7 @@ public:
       gfxInit(width, height);
       bufferInit();
       init();
+      glfwMakeContextCurrent(NULL);
       isReady = true;
    }
 
@@ -333,20 +335,23 @@ public:
    template <typename _DrawRep, typename _DrawPeriod, typename _SimRep, typename _SimPeriod>
    void Start(duration<_DrawRep, _DrawPeriod> drawSleepInterval, duration<_SimRep, _SimPeriod> simSleepInterval, function<bool()> haltingCondition) {
       startThreads(simSleepInterval, haltingCondition);
-      while (!haltingCondition() && !isClosing) { loop(drawSleepInterval); }
+      startDrawThread(drawSleepInterval, haltingCondition);
+      while (!haltingCondition() && !isClosing) { mainThreadLoop(drawSleepInterval); }
    }
 
    template <typename _DrawRep, typename _DrawPeriod, typename _SimRep, typename _SimPeriod>
    void Start(duration<_DrawRep, _DrawPeriod> drawSleepInterval, duration<_SimRep, _SimPeriod> simSleepInterval,
               function<bool(milliseconds)> haltingCondition) {
       startThreads(simSleepInterval, haltingCondition);
-      while (!haltingCondition(timeElapsed) && !isClosing) { loop(drawSleepInterval); }
+      startDrawThread(drawSleepInterval, haltingCondition);
+      while (!haltingCondition(timeElapsed) && !isClosing) { mainThreadLoop(drawSleepInterval); }
    }
 
    template <typename _DrawRep, typename _DrawPeriod, typename _SimRep, typename _SimPeriod>
    void Start(duration<_DrawRep, _DrawPeriod> drawSleepInterval, duration<_SimRep, _SimPeriod> simSleepInterval) {
       startThreads(simSleepInterval);
-      while (!isClosing) { loop(drawSleepInterval); }
+      startDrawThread(drawSleepInterval);
+      while (!isClosing) { mainThreadLoop(drawSleepInterval); }
    }
 
 private:
@@ -381,10 +386,8 @@ private:
    }
 
    void commonDraw() {
-      glfwPollEvents();
       glClearColor(bgColor.r, bgColor.g, bgColor.b, bgColor.a);
       glClear(GL_COLOR_BUFFER_BIT);
-      glfwGetFramebufferSize(window, &p_width, &p_height);
       glViewport(0, 0, p_width, p_height);
       glOrtho(0, p_width, p_height, 0, 1, -1);
       screenCorrectionTransform = glm::scale(identity, {2.0f / static_cast<float>(p_width), -2.0f / static_cast<float>(p_height), 1.0f});
@@ -615,10 +618,38 @@ private:
          simThreads.emplace_back([this, sleepInterval, i] { simLoop(i, sleepInterval); });
       }
    }
+   template <typename _Rep, typename _Period>
+   void startDrawThread(duration<_Rep, _Period> sleepInterval) {
+      drawThread = thread([this, sleepInterval] {
+         glfwMakeContextCurrent(window);
+         while (!isClosing) { loop(sleepInterval); }
+      });
+   }
+   template <typename _Rep, typename _Period>
+   void startDrawThread(duration<_Rep, _Period> sleepInterval, function<bool()> haltingCondition) {
+      drawThread = thread([this, sleepInterval, &haltingCondition] {
+         glfwMakeContextCurrent(window);
+         while (!haltingCondition() && !isClosing) { loop(sleepInterval); }
+      });
+   }
+   template <typename _Rep, typename _Period>
+   void startDrawThread(duration<_Rep, _Period> sleepInterval, function<bool(milliseconds)> haltingCondition) {
+      drawThread = thread([this, sleepInterval, &haltingCondition] {
+         glfwMakeContextCurrent(window);
+         while (!haltingCondition(timeElapsed) && !isClosing) { loop(sleepInterval); }
+      });
+   }
 
    template <typename _Rep, typename _Period>
    void loop(duration<_Rep, _Period> sleepInterval) {
       tick();
+      sleep_for(sleepInterval);
+   }
+
+   template <typename _Rep, typename _Period>
+   void mainThreadLoop(duration<_Rep, _Period> sleepInterval) {
+      glfwPollEvents();
+      glfwGetFramebufferSize(window, &p_width, &p_height);
       sleep_for(sleepInterval);
       timeElapsed = duration_cast<milliseconds>(high_resolution_clock::now() - p_initialTime);
    }
