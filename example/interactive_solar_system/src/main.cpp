@@ -122,6 +122,12 @@ public:
       if (codepoint == 'r') { Clear(); }
       if (codepoint == 'f') { ToggleFullscreen(); }
    }
+   void onKey(int key, int scancode, int action, int mods) override {
+      if (action)
+      {
+         if (key == GLFW_KEY_F11) { ToggleFullscreen(); }
+      }
+   }
 
 private:
    bool leftMouseDown = false;

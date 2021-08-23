@@ -158,6 +158,10 @@ private:
       auto instance = reinterpret_cast<Particulo*>(glfwGetWindowUserPointer(window));
       instance->onType(codepoint);
    }
+   static void s_KeypressCallback(GLFWwindow* window, int key, int scancode, int action, int mods) {
+      auto instance = reinterpret_cast<Particulo*>(glfwGetWindowUserPointer(window));
+      instance->onKey(key, scancode, action, mods);
+   }
    static void s_WindowClose(GLFWwindow* window) {
       auto instance = reinterpret_cast<Particulo*>(glfwGetWindowUserPointer(window));
       instance->isClosing = true;
@@ -170,6 +174,7 @@ public:
    virtual void onMouseClick(int button, int action, int mods) {}
    virtual void onMouseMove(double x, double y) {}
    virtual void onType(char32_t codepoint) {}
+   virtual void onKey(int key, int scancode, int action, int mods) {}
    // Called if the user closes the graphics window but before the program exits
    virtual void onClose() {}
 
@@ -529,6 +534,7 @@ private:
       glfwSetWindowCloseCallback(window, s_WindowClose);
       glfwSetCursorPosCallback(window, s_MouseMoveCallback);
       glfwSetCharCallback(window, s_KeyboardTypeCallback);
+      glfwSetKeyCallback(window, s_KeypressCallback);
       glfwSwapInterval(1);
    }
 
