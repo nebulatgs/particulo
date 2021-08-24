@@ -53,6 +53,11 @@ using std::unique_lock;
 #include <glm/gtc/matrix_inverse.hpp>
 namespace Particulo
 {
+enum CoordSpace
+{
+   ScreenSpace,
+   WorldSpace
+};
 // Shaders
 static const string VertexShader = R"(
    #version 450 core
@@ -185,10 +190,18 @@ protected:
    const float GetHeight() const { return p_height; }
    const float GetMaxCount() const { return p_maxCount; }
    const time_point& GetInitialTime() const { return p_initialTime; }
-   const std::tuple<double, double> GetMousePos() const {
+   const std::tuple<double, double> GetMousePos(CoordSpace coordSpace = ScreenSpace) const {
       double x, y;
       glfwGetCursorPos(window, &x, &y);
-      return {x, y};
+      if (coordSpace == ScreenSpace) { return {x, y}; }
+      else if (coordSpace == WorldSpace)
+      {
+         auto vec = glm::dvec4(x, y, 1.0, 1.0);
+         vec = glm::affineInverse(p_transform) * vec;
+         return {vec.x, vec.y};
+      }
+      else
+      { throw std::logic_error("Not implemented: GetMousePos(" + std::to_string(coordSpace) + ")"); }
    }
    const bool GetFullscreenState() const { return p_fullscreen; }
 

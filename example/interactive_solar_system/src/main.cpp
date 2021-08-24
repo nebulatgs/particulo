@@ -94,18 +94,17 @@ public:
       }
    }
    void onMouseClick(int button, int action, int mods) override {
-      auto [x, y] = GetMousePos();
-      auto vec = glm::dvec4(x, y, 1.0, 1.0);
-      vec = glm::affineInverse(translation * scale) * vec;
-      // vec = glm::affineInverse(translation) * vec;
+      auto [x, y] = GetMousePos(::Particulo::ScreenSpace);
+      auto [wX, wY] = GetMousePos(::Particulo::WorldSpace);
+
       leftMouseDown = button == 0 && action;
       leftMouseUp = button == 0 && !action;
       rightMouseDown = button == 1 && action;
       rightMouseUp = button == 1 && !action;
-      if (rightMouseDown) { newParticle = Add(v2d::v2d(vec.x, vec.y), 1.0); }
+      if (rightMouseDown) { newParticle = Add(v2d::v2d(wX, wY), 1.0); }
       if (rightMouseUp)
       {
-         newParticle->mass = newParticle->radius * newParticle->radius * newParticle->radius;
+         newParticle->mass = std::pow(newParticle->radius, 3.0f);
          newParticle->disabled = false;
       }
       if (leftMouseUp)
@@ -160,6 +159,6 @@ private:
 
 int main() {
    auto a = Example();
-   a.Create(1000, 2000, "Particulo Example: Interactive Solar System", 10000);
+   a.Create(1000, 1000, "Particulo Example: Interactive Solar System", 10000);
    a.Start(8ms, 8ms);
 }

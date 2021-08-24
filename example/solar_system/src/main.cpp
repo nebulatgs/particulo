@@ -45,6 +45,7 @@ public:
       AddParticles();
    }
    void simulate(const vector<shared_ptr<Particle>>& particles, milliseconds timeElapsed, int thread) override {
+      if (particles.size() == 0 || paused) return;
       const uint32_t step = particles.size() / 16;
       const uint32_t start_index = thread * step;
       const uint32_t end_index = (thread < 16 - 1) ? start_index + step : particles.size() - 1;
@@ -116,6 +117,7 @@ public:
       if (action)
       {
          if (key == GLFW_KEY_F11) { ToggleFullscreen(); }
+         if (key == GLFW_KEY_SPACE) { paused = !paused; }
       }
    }
 
@@ -124,6 +126,7 @@ private:
    bool leftMouseUp = false;
    double lmx, lmy = 0.0;
    double px, py = 0.0;
+   bool paused = false;
    glm::mat4 translation = glm::mat4(1.0f);
    glm::mat4 scale = glm::mat4(1.0f);
    double sf = 1.0;
