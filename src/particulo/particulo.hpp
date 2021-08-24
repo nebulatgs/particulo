@@ -111,6 +111,7 @@ static const string FragmentShader = R"(
 template <typename T>
 concept is_arithmetic = is_arithmetic_v<T>;
 
+#ifdef clang
 template <typename T>
 concept BasicParticleXY = requires(T a) {
    { a.index } -> is_arithmetic;
@@ -133,7 +134,23 @@ concept ColorfulParticle = requires(T a) {
    { a } -> Particle;
    { a.color } -> same_as<uint32_t>;
 };
+#else
+template <typename T>
+concept BasicParticleXY = (is_arithmetic_v<typeof T::index> && is_arithmetic_v<typeof T::x> && same_as<typeof T::x, typeof T::y> &&
+                           same_as<typeof T::radius, float>);
 
+template <typename T>
+concept BasicParticleV = (same_as<typeof T::pos, v2d::v2d> && same_as<typeof T::radius, float>);
+
+template <typename T>
+concept Particle = (BasicParticleXY<T> || BasicParticleV<T>) &&(constructible_from<T, int> || constructible_from<T, long>);
+
+template <typename T>
+concept ColorfulParticle = (Particle<T> && same_as<uint32_t, typeof T::color>);
+
+template <typename T>
+concept PlainParticle = (Particle<T> && !ColorfulParticle<T>);
+#endif
 // Structs
 struct RGBA
 {
