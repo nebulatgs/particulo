@@ -35,6 +35,9 @@ using std::is_arithmetic_v;
 #include <vector>
 using std::vector;
 
+#include <span>
+using std::span;
+
 #include <thread>
 using std::thread;
 
@@ -276,6 +279,7 @@ private:
 
 private:
    vector<shared_ptr<T>> particles;
+   vector<shared_ptr<T>> snapshot;
    GLFWwindow* window;
    bool isReady;
    milliseconds timeElapsed;
@@ -296,7 +300,8 @@ private:
 
 public:
    virtual void init() {}
-   virtual void simulate(const vector<shared_ptr<T>>& particles, milliseconds timeElapsed, int thread) = 0;
+   // virtual void simulate(const vector<shared_ptr<T>>& particles, milliseconds timeElapsed, int thread) = 0;
+   virtual void simulate(const vector<shared_ptr<T>>& snapshot, const span<shared_ptr<T>> section, milliseconds timeElapsed) = 0;
    virtual void update(const vector<shared_ptr<T>>& particles, milliseconds timeElapsed){};
    virtual ~Particulo(){};
 
@@ -347,6 +352,7 @@ public:
       gfxInit(width, height);
       bufferInit();
       init();
+      snapshot = particles;
       glfwMakeContextCurrent(NULL);
       isReady = true;
    }
@@ -411,11 +417,22 @@ private:
    void simLoop(int thread, duration<_Rep, _Period> sleepInterval) {
       while (!isClosing)
       {
-         mtx.lock();
-         simulate(particles, timeElapsed, thread);
-         if (thread == 0) { update(particles, timeElapsed); }
-         mtx.unlock();
+         if (particles.size() != 0) {
+            const int step = particles.size() / threadCount;
+            const int start_index = thread * step;
+            const int end_index = (thread < threadCount - 1) ? start_index + step : particles.size() - 1;
+            auto section = span{particles.begin() + start_index, particles.begin() + end_index};
+            simulate(snapshot, section, timeElapsed);
+            if (thread == 0) { 
+               mtx.lock(); 
+               update(particles, timeElapsed); 
+               snapshot = particles;
+               mtx.unlock();
+            }
+         }
+         mtx.lock_shared();
          if (sleepInterval.count() > 0) sleep_for(sleepInterval);
+         mtx.unlock_shared();
       }
    }
 

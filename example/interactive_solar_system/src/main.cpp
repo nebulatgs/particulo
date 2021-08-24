@@ -43,19 +43,15 @@ class Example : public Particulo::Particulo<Particle, 8>
 {
 public:
    void init() override { SetBGColor(0x222f3eFF); }
-   void simulate(const vector<shared_ptr<Particle>>& particles, milliseconds timeElapsed, int thread) override {
-      if (particles.size() == 0 || paused) return;
-      const uint32_t step = particles.size() / 4;
-      const uint32_t start_index = thread * step;
-      const uint32_t end_index = (thread < 4 - 1) ? start_index + step : particles.size() - 1;
-      for (int i = start_index; i < end_index; ++i)
+   void simulate(const vector<shared_ptr<Particle>>& snapshot, const span<shared_ptr<Particle>> section, milliseconds timeElapsed) override {
+      if (snapshot.size() == 0 || paused) return;
+      for (auto& each : section)
       {
-         auto& each = particles[i];
          if (each->disabled) { continue; }
-         for (auto& particle : particles)
+         for (auto& particle : snapshot)
          {
             if (particle->disabled) { continue; }
-            float distance = sqrtf(particle->pos.sqrDist(each->pos));
+            float distance = sqrtf(each->pos.sqrDist(particle->pos));
             if (distance > 4.0)
             {
                float pairForce = ((particle->mass * each->mass) / (GCONSTANT * (distance * distance)));

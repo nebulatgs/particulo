@@ -53,24 +53,24 @@ struct v2d
       y = 0.0f;
    }
 
-   v2d operator+(const v2d& r) { return v2d(this->x + r.x, this->y + r.y); }
-   v2d operator+(const float r) { return v2d(this->x + r, this->y + r); }
+   v2d operator+(const v2d& r) const { return v2d(this->x + r.x, this->y + r.y); }
+   v2d operator+(const float r) const { return v2d(this->x + r, this->y + r); }
    v2d operator+=(const v2d& r) {
       this->x += r.x;
       this->y += r.y;
       return (*this);
    }
 
-   v2d operator-(const v2d& r) { return v2d(this->x - r.x, this->y - r.y); }
-   v2d operator-(const float r) { return v2d(this->x - r, this->y - r); }
+   v2d operator-(const v2d& r) const{ return v2d(this->x - r.x, this->y - r.y); }
+   v2d operator-(const float r) const { return v2d(this->x - r, this->y - r); }
    v2d operator-=(const v2d& r) {
       this->x -= r.x;
       this->y -= r.y;
       return (*this);
    }
 
-   v2d operator*(const v2d& r) { return v2d(this->x * r.x, this->y * r.y); }
-   v2d operator*(const float r) { return v2d(this->x * r, this->y * r); }
+   v2d operator*(const v2d& r) const { return v2d(this->x * r.x, this->y * r.y); }
+   v2d operator*(const float r) const { return v2d(this->x * r, this->y * r); }
    v2d operator*=(const v2d& r) {
       this->x *= r.x;
       this->y *= r.y;
@@ -82,8 +82,8 @@ struct v2d
       return (*this);
    }
 
-   v2d operator/(const v2d& r) { return v2d(this->x / r.x, this->y / r.y); }
-   v2d operator/(const float r) { return v2d(this->x / r, this->y / r); }
+   v2d operator/(const v2d& r) const { return v2d(this->x / r.x, this->y / r.y); }
+   v2d operator/(const float r) const { return v2d(this->x / r, this->y / r); }
    v2d operator/=(const v2d& r) {
       this->x /= r.x;
       this->y /= r.y;

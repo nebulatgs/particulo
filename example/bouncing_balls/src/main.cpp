@@ -31,8 +31,8 @@ struct Particle
 class Example : public Particulo::Particulo<Particle>
 {
    void init() override { SetBGColor(0x222f3eFF); }
-   void simulate(const vector<shared_ptr<Particle>>& particles, milliseconds timeElapsed, int thread) override {
-      for (auto& p : particles)
+   void simulate(const vector<shared_ptr<Particle>>& snapshot, const span<shared_ptr<Particle>> section, milliseconds timeElapsed) override {
+      for (auto& p : section)
       {
          p->color = p->index % 2 == 0 ? 0xbf44fcff : 0x007ACCff;
          p->vel += p->acc;
@@ -47,5 +47,5 @@ class Example : public Particulo::Particulo<Particle>
 int main() {
    auto a = Example();
    a.Create(1000, 1000, 1000, "Particulo Example: Bouncing Balls", 100000);
-   a.Start(8ms, 1ms);
+   a.Start(8ms, 0ms);
 }
