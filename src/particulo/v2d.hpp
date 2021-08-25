@@ -61,7 +61,7 @@ struct v2d
       return (*this);
    }
 
-   v2d operator-(const v2d& r) const{ return v2d(this->x - r.x, this->y - r.y); }
+   v2d operator-(const v2d& r) const { return v2d(this->x - r.x, this->y - r.y); }
    v2d operator-(const float r) const { return v2d(this->x - r, this->y - r); }
    v2d operator-=(const v2d& r) {
       this->x -= r.x;
@@ -94,6 +94,9 @@ struct v2d
       this->y /= r;
       return (*this);
    }
+
+   // Dot product
+   double dot(const v2d& right) const { return (x * right.x + y * right.y); }
 
    v2d norm() {
       *this = *this * invLen();
