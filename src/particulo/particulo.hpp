@@ -417,22 +417,24 @@ private:
    void simLoop(int thread, duration<_Rep, _Period> sleepInterval) {
       while (!isClosing)
       {
-         if (particles.size() != 0) {
+         if (particles.size() != 0)
+         {
             const int step = particles.size() / threadCount;
             const int start_index = thread * step;
             const int end_index = (thread < threadCount - 1) ? start_index + step : particles.size() - 1;
             auto section = span{particles.begin() + start_index, particles.begin() + end_index};
             simulate(snapshot, section, timeElapsed);
-            if (thread == 0) { 
-               mtx.lock(); 
-               update(particles, timeElapsed); 
+            if (thread == 0)
+            {
+               mtx.lock();
+               update(particles, timeElapsed);
                snapshot = particles;
                mtx.unlock();
             }
          }
          mtx.lock_shared();
-         if (sleepInterval.count() > 0) sleep_for(sleepInterval);
          mtx.unlock_shared();
+         if (sleepInterval.count() > 0) sleep_for(sleepInterval);
       }
    }
 
