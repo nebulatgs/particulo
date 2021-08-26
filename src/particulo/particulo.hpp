@@ -303,7 +303,8 @@ private:
 
 public:
    virtual void init() {}
-   // virtual void simulate(const vector<shared_ptr<T>>& particles, milliseconds timeElapsed, int thread) = 0;
+   // virtual void simulate(const vector<shared_ptr<T>>& particles, milliseconds
+   // timeElapsed, int thread) = 0;
    virtual void simulate(const vector<shared_ptr<T>>& snapshot, const span<shared_ptr<T>> section, milliseconds timeElapsed) = 0;
    virtual void update(const vector<shared_ptr<T>>& particles, milliseconds timeElapsed){};
    virtual ~Particulo(){};
@@ -352,20 +353,20 @@ public:
       return {{v_v1nPrime.x + v_v1tPrime.x, v_v1nPrime.y + v_v1tPrime.y}, {v_v2nPrime.x + v_v2tPrime.x, v_v2nPrime.y + v_v2tPrime.y}};
    }
    static std::tuple<v2d::v2d, v2d::v2d> CollideElastic(T& particle1, T& particle2) {
-      auto v_n = particle2->pos - particle1->pos;
+      auto v_n = particle2.pos - particle1.pos;
       auto v_un = v_n.norm();
       auto v_ut = v2d::v2d(-v_un.y, v_un.x);
 
-      double v1n = v_un.dot(particle1->vel);
-      double v1t = v_ut.dot(particle1->vel);
-      double v2n = v_un.dot(particle2->vel);
-      double v2t = v_ut.dot(particle2->vel);
+      double v1n = v_un.dot(particle1.vel);
+      double v1t = v_ut.dot(particle1.vel);
+      double v2n = v_un.dot(particle2.vel);
+      double v2t = v_ut.dot(particle2.vel);
 
       double v1tPrime = v1t;
       double v2tPrime = v2t;
 
-      double v1nPrime = (v1n * (particle1->mass - particle2->mass) + 2.0 * particle2->mass * v2n) / (particle1->mass + particle2->mass);
-      double v2nPrime = (v2n * (particle2->mass - particle1->mass) + 2.0 * particle1->mass * v1n) / (particle1->mass + particle2->mass);
+      double v1nPrime = (v1n * (particle1.mass - particle2.mass) + 2.0 * particle2.mass * v2n) / (particle1.mass + particle2.mass);
+      double v2nPrime = (v2n * (particle2.mass - particle1.mass) + 2.0 * particle1.mass * v1n) / (particle1.mass + particle2.mass);
 
       auto v_v1nPrime = v_un * v1nPrime;
       auto v_v1tPrime = v_ut * v1tPrime;
@@ -567,7 +568,8 @@ private:
       // 1st attribute buffer : vertices
       glEnableVertexAttribArray(0);
       glBindBuffer(GL_ARRAY_BUFFER, billboard_vertex_buffer);
-      glVertexAttribPointer(0,        // attribute. No particular reason for 0, but must match the layout in the shader.
+      glVertexAttribPointer(0, // attribute. No particular reason for 0, but must
+                               // match the layout in the shader.
                             3,        // size
                             GL_FLOAT, // type
                             GL_FALSE, // normalized?
@@ -578,7 +580,8 @@ private:
       // 2nd attribute buffer : positions of particles' centers
       glEnableVertexAttribArray(1);
       glBindBuffer(GL_ARRAY_BUFFER, particles_position_buffer);
-      glVertexAttribPointer(1,        // attribute. No particular reason for 1, but must match the layout in the shader.
+      glVertexAttribPointer(1, // attribute. No particular reason for 1, but must
+                               // match the layout in the shader.
                             4,        // size : x + y + z + size => 4
                             GL_FLOAT, // type
                             GL_FALSE, // normalized?
@@ -589,11 +592,12 @@ private:
       // 3rd attribute buffer : particles' colors
       glEnableVertexAttribArray(2);
       glBindBuffer(GL_ARRAY_BUFFER, particles_color_buffer);
-      glVertexAttribPointer(2,        // attribute. No particular reason for 2, but must match the layout in the shader.
+      glVertexAttribPointer(2, // attribute. No particular reason for 2, but must match the layout
+                               // in the shader.
                             4,        // size : r + g + b + a => 4
                             GL_FLOAT, // type
-                            GL_TRUE,  // normalized? *** YES, this means that the unsigned char[4] will be accessible
-                                      // with a vec4 (floats) in the shader ***
+                            GL_TRUE,  // normalized? *** YES, this means that the unsigned char[4]
+                                      // will be accessible with a vec4 (floats) in the shader ***
                             0,        // stride
                             (void*) 0 // array buffer offset
       );
@@ -648,14 +652,14 @@ private:
    void updateBuffers() {
       glBindBuffer(GL_ARRAY_BUFFER, particles_position_buffer);
       glBufferData(GL_ARRAY_BUFFER, p_maxCount * 4 * sizeof(GLfloat), NULL,
-                   GL_STREAM_DRAW); // Buffer orphaning, a common way to improve streaming perf. See
-                                    // above link for details.
+                   GL_STREAM_DRAW); // Buffer orphaning, a common way to improve
+                                    // streaming perf. See above link for details.
       glBufferSubData(GL_ARRAY_BUFFER, 0, p_maxCount * sizeof(GLfloat) * 4, particle_position_size_data.data());
 
       glBindBuffer(GL_ARRAY_BUFFER, particles_color_buffer);
       glBufferData(GL_ARRAY_BUFFER, p_maxCount * 4 * sizeof(GLfloat), NULL,
-                   GL_STREAM_DRAW); // Buffer orphaning, a common way to improve streaming perf. See
-                                    // above link for details.
+                   GL_STREAM_DRAW); // Buffer orphaning, a common way to improve
+                                    // streaming perf. See above link for details.
       glBufferSubData(GL_ARRAY_BUFFER, 0, p_maxCount * sizeof(GLfloat) * 4, particle_color_data.data());
    }
 
@@ -689,13 +693,15 @@ private:
       // The VBO containing the positions and sizes of the particles
       glGenBuffers(1, &particles_position_buffer);
       glBindBuffer(GL_ARRAY_BUFFER, particles_position_buffer);
-      // Initialize with empty (NULL) buffer : it will be updated later, each frame.
+      // Initialize with empty (NULL) buffer : it will be updated later, each
+      // frame.
       glBufferData(GL_ARRAY_BUFFER, p_maxCount * 4 * sizeof(GLfloat), NULL, GL_STREAM_DRAW);
 
       // The VBO containing the colors of the particles
       glGenBuffers(1, &particles_color_buffer);
       glBindBuffer(GL_ARRAY_BUFFER, particles_color_buffer);
-      // Initialize with empty (NULL) buffer : it will be updated later, each frame.
+      // Initialize with empty (NULL) buffer : it will be updated later, each
+      // frame.
       glBufferData(GL_ARRAY_BUFFER, p_maxCount * 4 * sizeof(GLubyte), NULL, GL_STREAM_DRAW);
    }
 
@@ -768,5 +774,85 @@ private:
       mtx.unlock();
       sleep_for(sleepInterval);
    }
+};
+
+template <typename T, int threadCount>
+class Interactivity : public Particulo<T, threadCount>
+{
+public:
+   virtual void onScrollUser(double x, double y) {}
+   virtual void onMouseClickUser(int button, int action, int mods) {}
+   virtual void onMouseMoveUser(double x, double y) {}
+   virtual void onTypeUser(char32_t codepoint) {}
+   virtual void onKeyUser(int key, int scancode, int action, int mods) {}
+   // Called if the user closes the graphics window but before the program exits
+   virtual void onClose() {}
+
+private:
+   void onScroll(double x, double y) override {
+      auto transform = this->GetTransform();
+      if (y > 0)
+      {
+         scale = glm::scale(scale, {1.333f, 1.333f, 1.0f});
+         sf *= 1.333;
+      }
+      else
+      {
+         scale = glm::scale(scale, {0.75f, 0.75f, 1.0f});
+         sf *= 0.75;
+      }
+      onScrollUser(x, y);
+   }
+   void onMouseClick(int button, int action, int mods) override {
+      auto [x, y] = this->GetMousePos(ScreenSpace);
+
+      leftMouseDown = button == 0 && action;
+      leftMouseUp = button == 0 && !action;
+      rightMouseDown = button == 1 && action;
+      rightMouseUp = button == 1 && !action;
+
+      if (leftMouseUp)
+      {
+         px = px + ((x - lmx)) / sf;
+         py = py + ((y - lmy)) / sf;
+      }
+      if (leftMouseDown)
+      {
+         lmx = x;
+         lmy = y;
+      }
+      if (rightMouseDown)
+      {
+         rmx = x;
+         rmy = y;
+      }
+      onMouseClickUser(button, action, mods);
+   }
+   void onMouseMove(double x, double y) override {
+      if (leftMouseDown) { translation = glm::translate(glm::mat4(1.0f), {px + ((x - lmx)) / sf, py + ((y - lmy)) / sf, 0.0f}); }
+      onMouseMoveUser(x, y);
+   }
+   void onType(char32_t codepoint) override {
+      if (codepoint == 'f') { this->ToggleFullscreen(); }
+      onTypeUser(codepoint);
+   }
+   void onKey(int key, int scancode, int action, int mods) override {
+      if (action)
+      {
+         if (key == GLFW_KEY_F11) { this->ToggleFullscreen(); }
+      }
+      onKeyUser(key, scancode, action, mods);
+   }
+
+public:
+   bool leftMouseDown = false;
+   bool leftMouseUp = false;
+   bool rightMouseDown = false;
+   bool rightMouseUp = false;
+   double lmx, lmy, rmx, rmy = 0.0;
+   double px, py = 0.0;
+   glm::mat4 translation = glm::mat4(1.0f);
+   glm::mat4 scale = glm::mat4(1.0f);
+   double sf = 1.0;
 };
 } // namespace Particulo
