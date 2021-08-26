@@ -246,6 +246,35 @@ protected:
       mtx.unlock();
       return particle;
    }
+   template <typename... _Args>
+   shared_ptr<T> NewParticle(_Args&&... __args) {
+      return make_shared<T>(++maxParticleIndex, __args...);
+   }
+   void Swap(vector<shared_ptr<T>>&& newParticles) {
+      if (newParticles.size() >= p_maxCount)
+      {
+         throw std::logic_error("Attempted to exceed the max particle count in instance method "
+                                "Add(_Args&&... __args)");
+      }
+      mtx.lock();
+      particles = newParticles;
+      snapshot = particles;
+      mtx.unlock();
+   }
+   void DangerouslySet(vector<shared_ptr<T>>&& newParticles) {
+      if (newParticles.size() >= p_maxCount)
+      {
+         throw std::logic_error("Attempted to exceed the max particle count in instance method "
+                                "Add(_Args&&... __args)");
+      }
+      particles = newParticles;
+      snapshot = particles;
+      mtx.unlock();
+   }
+   vector<shared_ptr<T>>&& DangerouslyGet() {
+      mtx.lock();
+      return std::move(particles);
+   }
    void Remove() {
       unique_lock lock(mtx);
       particles.pop_back();
@@ -352,20 +381,21 @@ public:
       return {{v_v1nPrime.x + v_v1tPrime.x, v_v1nPrime.y + v_v1tPrime.y}, {v_v2nPrime.x + v_v2tPrime.x, v_v2nPrime.y + v_v2tPrime.y}};
    }
    static std::tuple<v2d::v2d, v2d::v2d> CollideElastic(T& particle1, T& particle2) {
-      auto v_n = particle2->pos - particle1->pos;
-      auto v_un = v_n.norm();
+      auto v_n = particle2.pos - particle1.pos;
+      auto v_un = v_n;
+      v_un.norm();
       auto v_ut = v2d::v2d(-v_un.y, v_un.x);
 
-      double v1n = v_un.dot(particle1->vel);
-      double v1t = v_ut.dot(particle1->vel);
-      double v2n = v_un.dot(particle2->vel);
-      double v2t = v_ut.dot(particle2->vel);
+      double v1n = v_un.dot(particle1.vel);
+      double v1t = v_ut.dot(particle1.vel);
+      double v2n = v_un.dot(particle2.vel);
+      double v2t = v_ut.dot(particle2.vel);
 
       double v1tPrime = v1t;
       double v2tPrime = v2t;
 
-      double v1nPrime = (v1n * (particle1->mass - particle2->mass) + 2.0 * particle2->mass * v2n) / (particle1->mass + particle2->mass);
-      double v2nPrime = (v2n * (particle2->mass - particle1->mass) + 2.0 * particle1->mass * v1n) / (particle1->mass + particle2->mass);
+      double v1nPrime = (v1n * (particle1.mass - particle2.mass) + 2.0 * particle2.mass * v2n) / (particle1.mass + particle2.mass);
+      double v2nPrime = (v2n * (particle2.mass - particle1.mass) + 2.0 * particle1.mass * v1n) / (particle1.mass + particle2.mass);
 
       auto v_v1nPrime = v_un * v1nPrime;
       auto v_v1tPrime = v_ut * v1tPrime;

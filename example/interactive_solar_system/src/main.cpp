@@ -51,14 +51,32 @@ public:
          for (auto& particle : snapshot)
          {
             if (particle->disabled) { continue; }
-            float distance = sqrtf(each->pos.sqrDist(particle->pos));
-            if (distance > 4.0)
+            if (each->index == particle->index) { continue; }
+            auto p1 = *each;
+            auto p2 = *particle;
+            p1.vel += p1.force / p1.mass;
+            p2.vel += p2.force / p2.mass;
+            p1.pos += p1.vel * TIMESTEP;
+            p2.pos += p2.vel * TIMESTEP;
+            float distance = std::sqrt(p1.pos.sqrDist(p2.pos));
+            if (std::abs(distance) < p1.radius + p2.radius)
             {
+               auto [p1vel, p2vel] = CollideElastic(p1, p2);
+               each->force += p1vel * each->mass;
+               particle->force += p2vel * particle->mass;
+               cout << each->pos.x << ", " << each->pos.y << ":" << p1vel.x << ", " << p1vel.y << ":" << p2vel.x << ", " << p2vel.y << endl;
+            }
+            else
+            {
+               distance = sqrtf(each->pos.sqrDist(particle->pos));
+               // if (distance > 4.0)
+               // {
                float pairForce = ((particle->mass * each->mass) / (GCONSTANT * (distance * distance)));
                auto F = ((particle->pos - each->pos) / distance) * pairForce;
                each->force += F;
                particle->force -= F;
             }
+            // }
          }
       }
    }
@@ -70,6 +88,7 @@ public:
             if (each->disabled) { continue; }
             each->vel += each->force / each->mass;
             each->pos += each->vel * TIMESTEP;
+            cout << each->vel.len() << endl;
             each->force = {0, 0};
          }
       }
