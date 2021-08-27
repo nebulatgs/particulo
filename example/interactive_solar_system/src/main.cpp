@@ -61,14 +61,13 @@ public:
             float distance = std::sqrt(p1.pos.sqrDist(p2.pos));
             if (std::abs(distance) < p1.radius + p2.radius)
             {
-               auto [p1vel, p2vel] = CollideElastic(p1, p2);
-               each->force += p1vel * each->mass;
-               particle->force += p2vel * particle->mass;
-               cout << each->pos.x << ", " << each->pos.y << ":" << p1vel.x << ", " << p1vel.y << ":" << p2vel.x << ", " << p2vel.y << endl;
+               auto newVel = CollideInelastic(p1, p2);
+               each->vel = newVel;
+               particle->vel = newVel;
             }
             else
             {
-               distance = sqrtf(each->pos.sqrDist(particle->pos));
+               // distance = sqrtf(each->pos.sqrDist(particle->pos));
                // if (distance > 4.0)
                // {
                float pairForce = ((particle->mass * each->mass) / (GCONSTANT * (distance * distance)));
@@ -121,6 +120,7 @@ public:
       {
          newParticle->mass = std::pow(newParticle->radius, 3.0f);
          newParticle->disabled = false;
+         newParticle = nullptr;
       }
       if (leftMouseUp)
       {

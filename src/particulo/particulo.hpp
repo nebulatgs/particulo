@@ -404,6 +404,14 @@ public:
 
       return {{v_v1nPrime.x + v_v1tPrime.x, v_v1nPrime.y + v_v1tPrime.y}, {v_v2nPrime.x + v_v2tPrime.x, v_v2nPrime.y + v_v2tPrime.y}};
    }
+
+   static v2d::v2d CollideInelastic(T& particle1, T& particle2) {
+      return ((particle1.vel * particle1.mass) + (particle2.vel * particle2.mass)) / (particle1.mass + particle2.mass);
+   }
+   static v2d::v2d CollideInelastic(shared_ptr<T> particle1, shared_ptr<T> particle2) {
+      return ((particle1->vel * particle1->mass) + (particle2->vel * particle2->mass)) / (particle1->mass + particle2->mass);
+   }
+
    void ToggleFullscreen() {
       if (!p_fullscreen)
       {
@@ -476,29 +484,9 @@ private:
    void simLoop(int thread, duration<_Rep, _Period> sleepInterval, function<bool()> haltingCondition) {
       while (!haltingCondition() && !isClosing)
       {
-         simulate(particles, timeElapsed, thread);
-         if (thread == 0) update(particles, timeElapsed);
-         if (sleepInterval.count() > 0) sleep_for(sleepInterval);
-      }
-   }
-
-   template <typename _Rep, typename _Period>
-   void simLoop(int thread, duration<_Rep, _Period> sleepInterval, function<bool(milliseconds)> haltingCondition) {
-      while (!haltingCondition(timeElapsed) && !isClosing)
-      {
-         simulate(particles, timeElapsed, thread);
-         if (thread == 0) update(particles, timeElapsed);
-         if (sleepInterval.count() > 0) sleep_for(sleepInterval);
-      }
-   }
-
-   template <typename _Rep, typename _Period>
-   void simLoop(int thread, duration<_Rep, _Period> sleepInterval) {
-      while (!isClosing)
-      {
+         mtx.lock_shared();
          if (particles.size() != 0)
          {
-            mtx.lock_shared();
             const int step = particles.size() / threadCount;
             const int start_index = thread * step;
             const int end_index = (thread < threadCount - 1) ? start_index + step : particles.size() - 1;
@@ -513,6 +501,66 @@ private:
                mtx.unlock();
             }
          }
+         else
+         { mtx.unlock_shared(); }
+         mtx.lock_shared();
+         mtx.unlock_shared();
+         if (sleepInterval.count() > 0) sleep_for(sleepInterval);
+      }
+   }
+
+   template <typename _Rep, typename _Period>
+   void simLoop(int thread, duration<_Rep, _Period> sleepInterval, function<bool(milliseconds)> haltingCondition) {
+      while (!haltingCondition(timeElapsed) && !isClosing)
+      {
+         mtx.lock_shared();
+         if (particles.size() != 0)
+         {
+            const int step = particles.size() / threadCount;
+            const int start_index = thread * step;
+            const int end_index = (thread < threadCount - 1) ? start_index + step : particles.size() - 1;
+            auto section = span{particles.begin() + start_index, particles.begin() + end_index};
+            simulate(snapshot, section, timeElapsed);
+            mtx.unlock_shared();
+            if (thread == 0)
+            {
+               mtx.lock();
+               update(particles, timeElapsed);
+               snapshot = particles;
+               mtx.unlock();
+            }
+         }
+         else
+         { mtx.unlock_shared(); }
+         mtx.lock_shared();
+         mtx.unlock_shared();
+         if (sleepInterval.count() > 0) sleep_for(sleepInterval);
+      }
+   }
+
+   template <typename _Rep, typename _Period>
+   void simLoop(int thread, duration<_Rep, _Period> sleepInterval) {
+      while (!isClosing)
+      {
+         mtx.lock_shared();
+         if (particles.size() != 0)
+         {
+            const int step = particles.size() / threadCount;
+            const int start_index = thread * step;
+            const int end_index = (thread < threadCount - 1) ? start_index + step : particles.size() - 1;
+            auto section = span{particles.begin() + start_index, particles.begin() + end_index};
+            simulate(snapshot, section, timeElapsed);
+            mtx.unlock_shared();
+            if (thread == 0)
+            {
+               mtx.lock();
+               update(particles, timeElapsed);
+               snapshot = particles;
+               mtx.unlock();
+            }
+         }
+         else
+         { mtx.unlock_shared(); }
          mtx.lock_shared();
          mtx.unlock_shared();
          if (sleepInterval.count() > 0) sleep_for(sleepInterval);
