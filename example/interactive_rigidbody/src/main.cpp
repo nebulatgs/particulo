@@ -44,7 +44,26 @@ struct Particle
 class Example : public Particulo::Particulo<Particle, 8>
 {
 public:
-   void init() override { SetBGColor(0x222f3eFF); }
+   void init() override {
+      SetBGColor(0x222f3eFF);
+      line = AddPolyLine({{0, 0}, {0, 100}, {100, 100}}, 0xFF00FFFF, 2.0);
+      auto line2 = AddPolyLine({{100, 100}, {100, 0}, {0, 0}}, 0x00FFFFFF, 3.0);
+      auto line3 = AddBezier(
+          {
+              {0, 0},
+              {0, 100},
+              {100, 0},
+              {100, 100},
+              {100, 100},
+              {200, 0},
+              {0, 200},
+              {0, 100},
+          },
+          0xFFFFF0FF, 1.0);
+      // line->GraphicsInit();
+      // line2->GraphicsInit();
+      // line3->GraphicsInit();
+   }
    void simulate(const vector<shared_ptr<Particle>>& snapshot, const span<shared_ptr<Particle>> section, milliseconds timeElapsed) override {
       if (snapshot.size() == 0 || paused) return;
       for (auto& each : section)
@@ -76,6 +95,7 @@ public:
             if (each->disabled) { continue; }
             each->pos += each->vel * TIMESTEP;
          }
+         line->SetColor(timeElapsed.count() * 1000);
       }
       if (newParticle && rightMouseDown) newParticle->radius += 1.0;
       SetTransform(scale * translation);
@@ -163,6 +183,7 @@ private:
    glm::mat4 scale = glm::mat4(1.0f);
    double sf = 1.0;
    shared_ptr<Particle> newParticle;
+   shared_ptr<::Particulo::PolyLine> line;
 };
 
 int main() {

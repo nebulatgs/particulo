@@ -52,6 +52,7 @@ using std::unique_lock;
 #include "shader.hpp"
 #include "v2d.hpp"
 #include <GLFW/glfw3.h>
+#include <Polyline2D.h>
 #include <glad/glad.h>
 #include <glm/gtc/matrix_inverse.hpp>
 namespace Particulo
@@ -62,12 +63,35 @@ enum CoordSpace
    WorldSpace
 };
 // Shaders
-static const string VertexShader = R"(
+
+static inline const string LineVertexShader = R"(
    #version 450 core
    precision highp float;
-   layout (location = 0) in lowp vec3 aPos;
-   layout (location = 1) in lowp vec4 pPos;
-   layout (location = 2) in lowp vec4 pCol;
+   layout (location = 0) in highp vec2 pPos;
+   layout (location = 1) in highp vec4 pCol;
+   uniform mat4 transform;
+   out vec4 col;
+   void main() {
+      gl_Position = transform * vec4(pPos, 0.0, 1.0);
+      col = pCol;
+   }
+)";
+
+static inline const string LineFragmentShader = R"(
+   #version 450 core
+   out vec4 FragColor;
+   in vec4 col;
+   void main() {
+      FragColor = col;
+   }
+)";
+
+static inline const string ParticleVertexShader = R"(
+   #version 450 core
+   precision highp float;
+   layout (location = 0) in highp vec3 aPos;
+   layout (location = 1) in highp vec4 pPos;
+   layout (location = 2) in highp vec4 pCol;
    uniform mat4 transform;
    out vec4 coord;
    out vec4 col;
@@ -80,7 +104,7 @@ static const string VertexShader = R"(
    }
 )";
 
-static const string FragmentShader = R"(
+static inline const string ParticleFragmentShader = R"(
    #version 450 core
    precision highp float;
    out vec4 FragColor;
@@ -109,7 +133,6 @@ static const string FragmentShader = R"(
       }
    }
 )";
-
 // Concepts
 template <typename T>
 concept is_arithmetic = is_arithmetic_v<T>;
@@ -155,6 +178,26 @@ template <typename T>
 concept PlainParticle = (Particle<T> && !ColorfulParticle<T>);
 #endif
 // Structs
+inline std::tuple<float, float, float, float> uint32ToFloatColor(uint32_t color) {
+   union
+   {
+      uint32_t hex;
+      struct
+      {
+         uint8_t a;
+         uint8_t b;
+         uint8_t g;
+         uint8_t r;
+      };
+   } temp;
+   temp.hex = color;
+   return {
+       temp.r / 255.0f,
+       temp.g / 255.0f,
+       temp.b / 255.0f,
+       temp.a / 255.0f,
+   };
+}
 struct RGBA
 {
    float r;
@@ -162,6 +205,147 @@ struct RGBA
    float b;
    float a;
 };
+class PolyLine
+{
+public:
+   PolyLine(int index, vector<crushedpixel::Vec2> points, double thickness, uint32_t color)
+       : index(index), points(std::move(points)), thickness(thickness) {
+      auto [r, g, b, a] = uint32ToFloatColor(color);
+      this->color = {r, g, b, a};
+      vertices = crushedpixel::Polyline2D::create(this->points, thickness, crushedpixel::Polyline2D::JointStyle::ROUND,
+                                                  crushedpixel::Polyline2D::EndCapStyle::ROUND);
+      for (auto v : vertices)
+      {
+         glVerts.push_back(v.x);
+         glVerts.push_back(v.y);
+
+         glCols.push_back(this->color.r);
+         glCols.push_back(this->color.g);
+         glCols.push_back(this->color.b);
+         glCols.push_back(this->color.a);
+      }
+      Init();
+   };
+
+private:
+   void Update() {
+      vertices = crushedpixel::Polyline2D::create(this->points, thickness, crushedpixel::Polyline2D::JointStyle::ROUND,
+                                                  crushedpixel::Polyline2D::EndCapStyle::ROUND);
+      glVerts.clear();
+      glCols.clear();
+      for (auto v : vertices)
+      {
+         glVerts.push_back(v.x);
+         glVerts.push_back(v.y);
+
+         glCols.push_back(this->color.r);
+         glCols.push_back(this->color.g);
+         glCols.push_back(this->color.b);
+         glCols.push_back(this->color.a);
+      }
+   }
+   void Init() {
+      glGenBuffers(1, &buffer);
+      glGenBuffers(1, &colorBuffer);
+      glGenVertexArrays(1, &VAO);
+      glBindVertexArray(VAO);
+      updateBuffers();
+   }
+
+public:
+   void updateBuffers() {
+      glBindBuffer(GL_ARRAY_BUFFER, buffer);
+      glBufferData(GL_ARRAY_BUFFER, glVerts.size() * sizeof(GLfloat), NULL, GL_STREAM_DRAW);
+      glBufferSubData(GL_ARRAY_BUFFER, 0, glVerts.size() * sizeof(GLfloat), glVerts.data());
+
+      glBindBuffer(GL_ARRAY_BUFFER, colorBuffer);
+      glBufferData(GL_ARRAY_BUFFER, glCols.size() * sizeof(GLfloat), NULL, GL_STREAM_DRAW);
+      glBufferSubData(GL_ARRAY_BUFFER, 0, glCols.size() * sizeof(GLfloat), glCols.data());
+   }
+   void Draw() {
+      glEnableVertexAttribArray(0);
+      glBindBuffer(GL_ARRAY_BUFFER, buffer);
+      glVertexAttribPointer(0, // attribute. No particular reason for 0, but must
+                               // match the layout in the shader.
+                            2,        // size
+                            GL_FLOAT, // type
+                            GL_FALSE, // normalized?
+                            0,        // stride
+                            (void*) 0 // array buffer offset
+      );
+      glEnableVertexAttribArray(1);
+      glBindBuffer(GL_ARRAY_BUFFER, colorBuffer);
+      glVertexAttribPointer(1, // attribute. No particular reason for 0, but must
+                               // match the layout in the shader.
+                            4,        // size
+                            GL_FLOAT, // type
+                            GL_FALSE, // normalized?
+                            0,        // stride
+                            (void*) 0 // array buffer offset
+      );
+      glDrawArrays(GL_TRIANGLES, 0, glVerts.size() / 2);
+   }
+
+public:
+   void SetColor(uint32_t color) {
+      auto [r, g, b, a] = uint32ToFloatColor(color);
+      this->color = {r, g, b, a};
+      Update();
+   }
+   void SetThickness(double thickness) {
+      this->thickness = thickness;
+      Update();
+   }
+   void SetPoints(vector<crushedpixel::Vec2> points) {
+      this->points = points;
+      Update();
+   }
+   void SetPoints(vector<crushedpixel::Vec2>&& points) {
+      this->points = points;
+      Update();
+   }
+
+public:
+   const RGBA& GetColor() const { return color; }
+   const int GetIndex() const { return index; }
+   const double GetThickness() const { return thickness; }
+   const vector<crushedpixel::Vec2>& GetPoints() const { return points; }
+
+private:
+   int index;
+   double thickness;
+   vector<crushedpixel::Vec2> points;
+   vector<crushedpixel::Vec2> vertices;
+   vector<GLfloat> glVerts;
+   vector<GLfloat> glCols;
+   RGBA color;
+   GLuint buffer;
+   GLuint colorBuffer;
+   GLuint VAO;
+};
+// class Bezier
+// {
+// private:
+//    void Update() {
+//       vertices = crushedpixel::Polyline2D::create(this->points, thickness, crushedpixel::Polyline2D::JointStyle::ROUND,
+//                                                   crushedpixel::Polyline2D::EndCapStyle::ROUND);
+//       glVerts.clear();
+//       glCols.clear();
+//       for (auto v : vertices)
+//       {
+//          glVerts.push_back(v.x);
+//          glVerts.push_back(v.y);
+
+//          glCols.push_back(this->color.r);
+//          glCols.push_back(this->color.g);
+//          glCols.push_back(this->color.b);
+//          glCols.push_back(this->color.a);
+//       }
+//    }
+
+// private:
+//    PolyLine polyLine;
+// };
 // Main
 template <ColorfulParticle T, int threadCount = 1>
 class Particulo
@@ -246,6 +430,57 @@ protected:
       mtx.unlock();
       return particle;
    }
+   shared_ptr<PolyLine> AddPolyLine(vector<crushedpixel::Vec2>&& points, uint32_t color, double thickness) {
+      mtx.lock();
+      auto line = make_shared<PolyLine>(++maxParticleIndex, std::move(points), thickness, color);
+      lines.push_back(line);
+      mtx.unlock();
+      return line;
+   }
+
+   static vector<crushedpixel::Vec2> BezierToPoints(vector<v2d::v2d> points, double t = 0.1) {
+      vector<crushedpixel::Vec2> result;
+      for (double u = 0.0; u <= 1.0; u += t)
+      {
+         int i = points.size() - 1;
+         while (i > 0)
+         {
+            for (int k = 0; k < i; k++)
+            {
+               points[k] = (points[k + 1] - points[k]) * points[k] + t;
+               cout << points[k].x << ", " << points[k].y << endl;
+            }
+            i--;
+         }
+         result.push_back({points[0].x, points[0].y});
+      }
+      return result;
+   }
+
+   shared_ptr<PolyLine> AddBezier(vector<v2d::v2d>&& controlPoints, uint32_t color, double thickness) {
+
+      // auto points = BezierToPoints(controlPoints);
+      vector<crushedpixel::Vec2> points;
+      for (int j = 0; j < controlPoints.size(); j += 4)
+      {
+         double xu = 0.0, yu = 0.0, u = 0.0;
+         auto& c1 = controlPoints[j + 0];
+         auto& c2 = controlPoints[j + 1];
+         auto& c3 = controlPoints[j + 2];
+         auto& c4 = controlPoints[j + 3];
+         for (u = 0.0; u <= 1.0; u += 0.0001)
+         {
+            xu = pow(1 - u, 3) * c1.x + 3 * u * pow(1 - u, 2) * c2.x + 3 * pow(u, 2) * (1 - u) * c3.x + pow(u, 3) * c4.x;
+            yu = pow(1 - u, 3) * c1.y + 3 * u * pow(1 - u, 2) * c2.y + 3 * pow(u, 2) * (1 - u) * c3.y + pow(u, 3) * c4.y;
+            points.push_back({xu, yu});
+         }
+      }
+      mtx.lock();
+      auto line = make_shared<PolyLine>(++maxParticleIndex, std::move(points), thickness, color);
+      lines.push_back(line);
+      mtx.unlock();
+      return line;
+   }
    template <typename... _Args>
    shared_ptr<T> NewParticle(_Args&&... __args) {
       return make_shared<T>(++maxParticleIndex, __args...);
@@ -302,12 +537,16 @@ private:
 
 private:
    GLuint VAO;
-   Shader shader;
+   Shader particleShader;
+   Shader lineShader;
    GLuint particles_position_buffer;
    GLuint particles_color_buffer;
    GLuint billboard_vertex_buffer;
    vector<GLfloat> particle_position_size_data;
    vector<GLfloat> particle_color_data;
+
+private:
+   vector<shared_ptr<PolyLine>> lines;
 
 private:
    vector<shared_ptr<T>> particles;
@@ -494,16 +733,16 @@ private:
             auto section = span{particles.begin() + start_index, particles.begin() + end_index};
             simulate(snapshot, section, timeElapsed);
             mtx.unlock_shared();
-            if (thread == 0)
-            {
-               mtx.lock();
-               update(particles, timeElapsed);
-               snapshot = particles;
-               mtx.unlock();
-            }
          }
          else
          { mtx.unlock_shared(); }
+         if (thread == 0)
+         {
+            mtx.lock();
+            update(particles, timeElapsed);
+            snapshot = particles;
+            mtx.unlock();
+         }
          mtx.lock_shared();
          mtx.unlock_shared();
          if (sleepInterval.count() > 0) sleep_for(sleepInterval);
@@ -523,16 +762,16 @@ private:
             auto section = span{particles.begin() + start_index, particles.begin() + end_index};
             simulate(snapshot, section, timeElapsed);
             mtx.unlock_shared();
-            if (thread == 0)
-            {
-               mtx.lock();
-               update(particles, timeElapsed);
-               snapshot = particles;
-               mtx.unlock();
-            }
          }
          else
          { mtx.unlock_shared(); }
+         if (thread == 0)
+         {
+            mtx.lock();
+            update(particles, timeElapsed);
+            snapshot = particles;
+            mtx.unlock();
+         }
          mtx.lock_shared();
          mtx.unlock_shared();
          if (sleepInterval.count() > 0) sleep_for(sleepInterval);
@@ -552,16 +791,16 @@ private:
             auto section = span{particles.begin() + start_index, particles.begin() + end_index};
             simulate(snapshot, section, timeElapsed);
             mtx.unlock_shared();
-            if (thread == 0)
-            {
-               mtx.lock();
-               update(particles, timeElapsed);
-               snapshot = particles;
-               mtx.unlock();
-            }
          }
          else
          { mtx.unlock_shared(); }
+         if (thread == 0)
+         {
+            mtx.lock();
+            update(particles, timeElapsed);
+            snapshot = particles;
+            mtx.unlock();
+         }
          mtx.lock_shared();
          mtx.unlock_shared();
          if (sleepInterval.count() > 0) sleep_for(sleepInterval);
@@ -576,32 +815,13 @@ private:
       screenCorrectionTransform = glm::scale(identity, {2.0f / static_cast<float>(p_width), -2.0f / static_cast<float>(p_height), 1.0f});
       tempMatrix = screenCorrectionTransform * p_transform;
       tempMatrix = glm::translate(tempMatrix, {p_width / -2.0f, p_height / -2.0f, 0.0f});
-      shader.SetMatrix4("transform", tempMatrix, true);
+      particleShader.SetMatrix4("transform", tempMatrix, true);
       setParticlePos();
       updateBuffers();
       draw();
+      lineShader.SetMatrix4("transform", tempMatrix, true);
+      drawLines();
       glfwSwapBuffers(window);
-   }
-
-   static std::tuple<float, float, float, float> uint32ToFloatColor(uint32_t color) {
-      union
-      {
-         uint32_t hex;
-         struct
-         {
-            uint8_t a;
-            uint8_t b;
-            uint8_t g;
-            uint8_t r;
-         };
-      } temp;
-      temp.hex = color;
-      return {
-          temp.r / 255.0f,
-          temp.g / 255.0f,
-          temp.b / 255.0f,
-          temp.a / 255.0f,
-      };
    }
 
    void setParticlePos() requires(BasicParticleXY<T>) {
@@ -688,6 +908,10 @@ private:
       glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, p_maxCount);
    }
 
+   void drawLines() {
+      for (auto line : lines) { line->Draw(); }
+   }
+
    void gfxInit(int width, int height) {
       p_width = width;
       p_height = height;
@@ -739,13 +963,16 @@ private:
                    GL_STREAM_DRAW); // Buffer orphaning, a common way to improve
                                     // streaming perf. See above link for details.
       glBufferSubData(GL_ARRAY_BUFFER, 0, p_maxCount * sizeof(GLfloat) * 4, particle_color_data.data());
+
+      for (auto& line : lines) { line->updateBuffers(); }
    }
 
    void bufferInit() requires(ColorfulParticle<T>) {
       particle_position_size_data.resize(p_maxCount * 4);
       particle_color_data.resize(p_maxCount * 4);
       particles.reserve(p_maxCount);
-      shader.CompileStrings(VertexShader, FragmentShader);
+      particleShader.CompileStrings(ParticleVertexShader, ParticleFragmentShader);
+      lineShader.CompileStrings(LineVertexShader, LineFragmentShader);
       static const GLfloat vertices[] = {
           -1.0f, -1.0f, 0.0f, 1.0f, -1.0f, 0.0f, -1.0f, 1.0f, 0.0f, 1.0f, 1.0f, 0.0f,
       };
@@ -781,6 +1008,8 @@ private:
       // Initialize with empty (NULL) buffer : it will be updated later, each
       // frame.
       glBufferData(GL_ARRAY_BUFFER, p_maxCount * 4 * sizeof(GLubyte), NULL, GL_STREAM_DRAW);
+
+      // for (auto line : lines) { line->GraphicsInit(); }
    }
 
    template <typename _Rep, typename _Period>
