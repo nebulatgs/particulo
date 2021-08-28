@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <numbers>
@@ -43,12 +44,12 @@ struct Particle
 };
 class Example : public Particulo::Particulo<Particle, 8>
 {
-public:
+protected:
    void init() override {
       SetBGColor(0x222f3eFF);
-      line = AddPolyLine({{0, 0}, {0, 100}, {100, 100}}, 0xFF00FFFF, 2.0);
-      auto line2 = AddPolyLine({{100, 100}, {100, 0}, {0, 0}}, 0x00FFFFFF, 3.0);
-      auto line3 = AddBezier(
+      // line = AddPolyLine({{0, 0}, {0, 100}, {100, 100}}, 0xFF00FFFF, 2.0);
+      // auto line2 = AddPolyLine({{100, 100}, {100, 0}, {0, 0}}, 0x00FFFFFF, 3.0);
+      bezier = AddBezier(
           {
               {0, 0},
               {0, 100},
@@ -59,7 +60,8 @@ public:
               {0, 200},
               {0, 100},
           },
-          0xFFFFF0FF, 1.0);
+          0xFFFFFFFF, 1.0);
+
       // line->GraphicsInit();
       // line2->GraphicsInit();
       // line3->GraphicsInit();
@@ -95,7 +97,10 @@ public:
             if (each->disabled) { continue; }
             each->pos += each->vel * TIMESTEP;
          }
-         line->SetColor(timeElapsed.count() * 1000);
+         // line->SetColor(timeElapsed.count() * 1000);
+         // auto controlPoints = bezier->GetControlPoints();
+         // for (auto& controlPoint : controlPoints) { controlPoint.x++; }
+         // bezier->SetControlPoints(controlPoints);
       }
       if (newParticle && rightMouseDown) newParticle->radius += 1.0;
       SetTransform(scale * translation);
@@ -184,10 +189,11 @@ private:
    double sf = 1.0;
    shared_ptr<Particle> newParticle;
    shared_ptr<::Particulo::PolyLine> line;
+   shared_ptr<::Particulo::Bezier> bezier;
 };
 
 int main() {
    auto a = Example();
-   a.Create(1000, 1000, "Particulo Example: Rigidbody", 10000);
+   a.Create<10000>(1000, 1000, "Particulo Example: Rigidbody");
    a.Start(8ms, 8ms);
 }

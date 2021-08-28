@@ -1,3 +1,5 @@
+#pragma once
+
 #define GLFW_INCLUDE_NONE
 #include <tuple>
 
@@ -52,7 +54,7 @@ using std::unique_lock;
 #include "shader.hpp"
 #include "v2d.hpp"
 #include <GLFW/glfw3.h>
-#include <Polyline2D.h>
+#include <Polyline2D.hpp>
 #include <glad/glad.h>
 #include <glm/gtc/matrix_inverse.hpp>
 namespace Particulo
@@ -205,9 +207,18 @@ struct RGBA
    float b;
    float a;
 };
-class PolyLine
+
+class GraphicsPrimitive
 {
 public:
+   virtual void Draw() = 0;
+   virtual void UpdateBuffers() = 0;
+};
+
+class PolyLine : public GraphicsPrimitive
+{
+public:
+   PolyLine() = default;
    PolyLine(int index, vector<crushedpixel::Vec2> points, double thickness, uint32_t color)
        : index(index), points(std::move(points)), thickness(thickness) {
       auto [r, g, b, a] = uint32ToFloatColor(color);
@@ -249,11 +260,11 @@ private:
       glGenBuffers(1, &colorBuffer);
       glGenVertexArrays(1, &VAO);
       glBindVertexArray(VAO);
-      updateBuffers();
+      UpdateBuffers();
    }
 
 public:
-   void updateBuffers() {
+   void UpdateBuffers() override {
       glBindBuffer(GL_ARRAY_BUFFER, buffer);
       glBufferData(GL_ARRAY_BUFFER, glVerts.size() * sizeof(GLfloat), NULL, GL_STREAM_DRAW);
       glBufferSubData(GL_ARRAY_BUFFER, 0, glVerts.size() * sizeof(GLfloat), glVerts.data());
@@ -262,7 +273,7 @@ public:
       glBufferData(GL_ARRAY_BUFFER, glCols.size() * sizeof(GLfloat), NULL, GL_STREAM_DRAW);
       glBufferSubData(GL_ARRAY_BUFFER, 0, glCols.size() * sizeof(GLfloat), glCols.data());
    }
-   void Draw() {
+   void Draw() override {
       glEnableVertexAttribArray(0);
       glBindBuffer(GL_ARRAY_BUFFER, buffer);
       glVertexAttribPointer(0, // attribute. No particular reason for 0, but must
@@ -323,29 +334,65 @@ private:
    GLuint colorBuffer;
    GLuint VAO;
 };
-// class Bezier
-// {
-// private:
-//    void Update() {
-//       vertices = crushedpixel::Polyline2D::create(this->points, thickness, crushedpixel::Polyline2D::JointStyle::ROUND,
-//                                                   crushedpixel::Polyline2D::EndCapStyle::ROUND);
-//       glVerts.clear();
-//       glCols.clear();
-//       for (auto v : vertices)
-//       {
-//          glVerts.push_back(v.x);
-//          glVerts.push_back(v.y);
+class Bezier : public GraphicsPrimitive
+{
+public:
+   Bezier(int index, vector<v2d::v2d> controlPoints, double thickness, uint32_t color)
+       : index(index), controlPoints(std::move(controlPoints)), color(color) {
+      Update();
+   }
 
-//          glCols.push_back(this->color.r);
-//          glCols.push_back(this->color.g);
-//          glCols.push_back(this->color.b);
-//          glCols.push_back(this->color.a);
-//       }
-//    }
+public:
+   const vector<v2d::v2d>& GetControlPoints() const { return controlPoints; }
+   const uint32_t GetColor() const { return color; }
+   const double GetThickness() const { return thickness; }
 
-// private:
-//    PolyLine polyLine;
-// };
+public:
+   void SetControlPoints(vector<v2d::v2d> controlPoints) {
+      this->controlPoints = controlPoints;
+      Update();
+   }
+   void SetColor(uint32_t color) {
+      this->color = color;
+      UpdateColor();
+   }
+   void SetThickness(double thickness) {
+      this->thickness = thickness;
+      Update();
+   }
+
+public:
+   void Draw() override { polyLine.Draw(); }
+   void UpdateBuffers() override { polyLine.UpdateBuffers(); }
+
+private:
+   void Update() {
+      vector<crushedpixel::Vec2> points;
+      for (int j = 0; j < this->controlPoints.size(); j += 4)
+      {
+         float xu = 0.0, yu = 0.0, u = 0.0;
+         auto& c1 = this->controlPoints[j + 0];
+         auto& c2 = this->controlPoints[j + 1];
+         auto& c3 = this->controlPoints[j + 2];
+         auto& c4 = this->controlPoints[j + 3];
+         for (u = 0.0; u <= 1.0; u += 0.0001)
+         {
+            xu = pow(1 - u, 3) * c1.x + 3 * u * pow(1 - u, 2) * c2.x + 3 * pow(u, 2) * (1 - u) * c3.x + pow(u, 3) * c4.x;
+            yu = pow(1 - u, 3) * c1.y + 3 * u * pow(1 - u, 2) * c2.y + 3 * pow(u, 2) * (1 - u) * c3.y + pow(u, 3) * c4.y;
+            points.push_back({xu, yu});
+         }
+      }
+      polyLine = PolyLine(index, std::move(points), thickness, color);
+   }
+   void UpdateColor() { polyLine.SetColor(color); }
+
+private:
+   int index;
+   uint32_t color;
+   double thickness;
+   PolyLine polyLine;
+   vector<v2d::v2d> controlPoints;
+};
 // Main
 template <ColorfulParticle T, int threadCount = 1>
 class Particulo
@@ -378,7 +425,7 @@ private:
       glfwDestroyWindow(window);
    }
 
-public:
+protected:
    virtual void onScroll(double x, double y) {}
    virtual void onMouseClick(int button, int action, int mods) {}
    virtual void onMouseMove(double x, double y) {}
@@ -417,9 +464,8 @@ protected:
    void SetTransform(glm::mat4 transform) { p_transform = transform; }
    template <typename... _Args>
    shared_ptr<T> Add(_Args&&... __args) {
-      // unique_lock lock(mtx);
-      mtx.lock();
-      if (particles.size() >= p_maxCount)
+      unique_lock lock(mtx);
+      if (particles.size() == p_maxCount)
       {
          throw std::logic_error("Attempted to exceed the max particle count in instance method "
                                 "Add(_Args&&... __args)");
@@ -427,77 +473,55 @@ protected:
       auto particle = make_shared<T>(++maxParticleIndex, __args...);
       particles.push_back(particle);
       snapshot = particles;
-      mtx.unlock();
       return particle;
    }
    shared_ptr<PolyLine> AddPolyLine(vector<crushedpixel::Vec2>&& points, uint32_t color, double thickness) {
-      mtx.lock();
+      unique_lock lock(mtx);
       auto line = make_shared<PolyLine>(++maxParticleIndex, std::move(points), thickness, color);
-      lines.push_back(line);
-      mtx.unlock();
+      primitives.push_back(line);
       return line;
    }
 
-   static vector<crushedpixel::Vec2> BezierToPoints(vector<v2d::v2d> points, double t = 0.1) {
-      vector<crushedpixel::Vec2> result;
-      for (double u = 0.0; u <= 1.0; u += t)
-      {
-         int i = points.size() - 1;
-         while (i > 0)
-         {
-            for (int k = 0; k < i; k++)
-            {
-               points[k] = (points[k + 1] - points[k]) * points[k] + t;
-               cout << points[k].x << ", " << points[k].y << endl;
-            }
-            i--;
-         }
-         result.push_back({points[0].x, points[0].y});
-      }
-      return result;
-   }
+   // static vector<crushedpixel::Vec2> BezierToPoints(vector<v2d::v2d> points, double t = 0.1) {
+   //    vector<crushedpixel::Vec2> result;
+   //    for (double u = 0.0; u <= 1.0; u += t)
+   //    {
+   //       int i = points.size() - 1;
+   //       while (i > 0)
+   //       {
+   //          for (int k = 0; k < i; k++)
+   //          {
+   //             points[k] = (points[k + 1] - points[k]) * points[k] + t;
+   //             cout << points[k].x << ", " << points[k].y << endl;
+   //          }
+   //          i--;
+   //       }
+   //       result.push_back({points[0].x, points[0].y});
+   //    }
+   //    return result;
+   // }
 
-   shared_ptr<PolyLine> AddBezier(vector<v2d::v2d>&& controlPoints, uint32_t color, double thickness) {
-
-      // auto points = BezierToPoints(controlPoints);
-      vector<crushedpixel::Vec2> points;
-      for (int j = 0; j < controlPoints.size(); j += 4)
-      {
-         double xu = 0.0, yu = 0.0, u = 0.0;
-         auto& c1 = controlPoints[j + 0];
-         auto& c2 = controlPoints[j + 1];
-         auto& c3 = controlPoints[j + 2];
-         auto& c4 = controlPoints[j + 3];
-         for (u = 0.0; u <= 1.0; u += 0.0001)
-         {
-            xu = pow(1 - u, 3) * c1.x + 3 * u * pow(1 - u, 2) * c2.x + 3 * pow(u, 2) * (1 - u) * c3.x + pow(u, 3) * c4.x;
-            yu = pow(1 - u, 3) * c1.y + 3 * u * pow(1 - u, 2) * c2.y + 3 * pow(u, 2) * (1 - u) * c3.y + pow(u, 3) * c4.y;
-            points.push_back({xu, yu});
-         }
-      }
-      mtx.lock();
-      auto line = make_shared<PolyLine>(++maxParticleIndex, std::move(points), thickness, color);
-      lines.push_back(line);
-      mtx.unlock();
-      return line;
+   shared_ptr<Bezier> AddBezier(vector<v2d::v2d> controlPoints, uint32_t color, double thickness) {
+      unique_lock lock(mtx);
+      auto bezier = make_shared<Bezier>(++maxParticleIndex, std::move(controlPoints), thickness, color);
+      primitives.push_back(bezier);
+      return bezier;
    }
    template <typename... _Args>
    shared_ptr<T> NewParticle(_Args&&... __args) {
       return make_shared<T>(++maxParticleIndex, __args...);
    }
    void Swap(vector<shared_ptr<T>>&& newParticles) {
-      if (newParticles.size() >= p_maxCount)
+      if (newParticles.size() > p_maxCount)
       {
          throw std::logic_error("Attempted to exceed the max particle count in instance method "
                                 "Add(_Args&&... __args)");
       }
-      mtx.lock();
       particles = newParticles;
       snapshot = particles;
-      mtx.unlock();
    }
    void DangerouslySet(vector<shared_ptr<T>>&& newParticles) {
-      if (newParticles.size() >= p_maxCount)
+      if (newParticles.size() > p_maxCount)
       {
          throw std::logic_error("Attempted to exceed the max particle count in instance method "
                                 "Add(_Args&&... __args)");
@@ -546,7 +570,7 @@ private:
    vector<GLfloat> particle_color_data;
 
 private:
-   vector<shared_ptr<PolyLine>> lines;
+   vector<shared_ptr<GraphicsPrimitive>> primitives;
 
 private:
    vector<shared_ptr<T>> particles;
@@ -577,7 +601,7 @@ public:
    virtual void update(const vector<shared_ptr<T>>& particles, milliseconds timeElapsed){};
    virtual ~Particulo(){};
 
-public:
+protected:
    void SetBGColor(float r, float g, float b, float a = 1.0f) { bgColor = {r, g, b, a}; }
    void SetBGColor(RGBA color) { bgColor = color; }
    void SetBGColor(uint32_t color) {
@@ -669,8 +693,12 @@ public:
       }
       p_fullscreen = !p_fullscreen;
    }
-   void Create(int width, int height, int initialCount, string title = "Particulo", int maxCount = 1 << 14) {
-      if (initialCount > maxCount) throw std::logic_error("Attempted to exceed the max particle count during creation");
+   void tick() { commonDraw(); }
+
+public:
+   template <int maxCount = 1 << 14, int initialCount = 0>
+   void Create(int width, int height, string title = "Particulo") {
+      static_assert(initialCount < maxCount, "Attempted to exceed the max particle count during creation");
       p_initialTime = high_resolution_clock::now();
       p_maxCount = maxCount;
       p_title = title;
@@ -683,20 +711,6 @@ public:
       glfwMakeContextCurrent(NULL);
       isReady = true;
    }
-   void Create(int width, int height, string title = "Particulo", int maxCount = 1 << 14) {
-      p_initialTime = high_resolution_clock::now();
-      p_maxCount = maxCount;
-      p_title = title;
-      maxParticleIndex = 0;
-      gfxInit(width, height);
-      bufferInit();
-      init();
-      glfwMakeContextCurrent(NULL);
-      isReady = true;
-   }
-
-   void tick() { commonDraw(); }
-
    template <typename _DrawRep, typename _DrawPeriod, typename _SimRep, typename _SimPeriod>
    void Start(duration<_DrawRep, _DrawPeriod> drawSleepInterval, duration<_SimRep, _SimPeriod> simSleepInterval, function<bool()> haltingCondition) {
       startThreads(simSleepInterval, haltingCondition);
@@ -724,28 +738,24 @@ private:
    void simLoop(int thread, duration<_Rep, _Period> sleepInterval, function<bool()> haltingCondition) {
       while (!haltingCondition() && !isClosing)
       {
-         mtx.lock_shared();
-         if (particles.size() != 0)
          {
-            const int step = particles.size() / threadCount;
-            const int start_index = thread * step;
-            const int end_index = (thread < threadCount - 1) ? start_index + step : particles.size() - 1;
-            auto section = span{particles.begin() + start_index, particles.begin() + end_index};
-            simulate(snapshot, section, timeElapsed);
-            mtx.unlock_shared();
+            shared_lock lock(mtx);
+            if (particles.size() != 0)
+            {
+               const int step = particles.size() / threadCount;
+               const int start_index = thread * step;
+               const int end_index = (thread < threadCount - 1) ? start_index + step : particles.size() - 1;
+               auto section = span{particles.begin() + start_index, particles.begin() + end_index};
+               simulate(snapshot, section, timeElapsed);
+            }
          }
-         else
-         { mtx.unlock_shared(); }
          if (thread == 0)
          {
-            mtx.lock();
+            unique_lock lock(mtx);
             update(particles, timeElapsed);
             snapshot = particles;
-            mtx.unlock();
          }
-         mtx.lock_shared();
-         mtx.unlock_shared();
-         if (sleepInterval.count() > 0) sleep_for(sleepInterval);
+         sleep_for(sleepInterval);
       }
    }
 
@@ -753,28 +763,24 @@ private:
    void simLoop(int thread, duration<_Rep, _Period> sleepInterval, function<bool(milliseconds)> haltingCondition) {
       while (!haltingCondition(timeElapsed) && !isClosing)
       {
-         mtx.lock_shared();
-         if (particles.size() != 0)
          {
-            const int step = particles.size() / threadCount;
-            const int start_index = thread * step;
-            const int end_index = (thread < threadCount - 1) ? start_index + step : particles.size() - 1;
-            auto section = span{particles.begin() + start_index, particles.begin() + end_index};
-            simulate(snapshot, section, timeElapsed);
-            mtx.unlock_shared();
+            shared_lock lock(mtx);
+            if (particles.size() != 0)
+            {
+               const int step = particles.size() / threadCount;
+               const int start_index = thread * step;
+               const int end_index = (thread < threadCount - 1) ? start_index + step : particles.size() - 1;
+               auto section = span{particles.begin() + start_index, particles.begin() + end_index};
+               simulate(snapshot, section, timeElapsed);
+            }
          }
-         else
-         { mtx.unlock_shared(); }
          if (thread == 0)
          {
-            mtx.lock();
+            unique_lock lock(mtx);
             update(particles, timeElapsed);
             snapshot = particles;
-            mtx.unlock();
          }
-         mtx.lock_shared();
-         mtx.unlock_shared();
-         if (sleepInterval.count() > 0) sleep_for(sleepInterval);
+         sleep_for(sleepInterval);
       }
    }
 
@@ -782,28 +788,24 @@ private:
    void simLoop(int thread, duration<_Rep, _Period> sleepInterval) {
       while (!isClosing)
       {
-         mtx.lock_shared();
-         if (particles.size() != 0)
          {
-            const int step = particles.size() / threadCount;
-            const int start_index = thread * step;
-            const int end_index = (thread < threadCount - 1) ? start_index + step : particles.size() - 1;
-            auto section = span{particles.begin() + start_index, particles.begin() + end_index};
-            simulate(snapshot, section, timeElapsed);
-            mtx.unlock_shared();
+            shared_lock lock(mtx);
+            if (particles.size() != 0)
+            {
+               const int step = particles.size() / threadCount;
+               const int start_index = thread * step;
+               const int end_index = (thread < threadCount - 1) ? start_index + step : particles.size() - 1;
+               auto section = span{particles.begin() + start_index, particles.begin() + end_index};
+               simulate(snapshot, section, timeElapsed);
+            }
          }
-         else
-         { mtx.unlock_shared(); }
          if (thread == 0)
          {
-            mtx.lock();
+            unique_lock lock(mtx);
             update(particles, timeElapsed);
             snapshot = particles;
-            mtx.unlock();
          }
-         mtx.lock_shared();
-         mtx.unlock_shared();
-         if (sleepInterval.count() > 0) sleep_for(sleepInterval);
+         sleep_for(sleepInterval);
       }
    }
 
@@ -909,14 +911,14 @@ private:
    }
 
    void drawLines() {
-      for (auto line : lines) { line->Draw(); }
+      for (auto& primitive : primitives) { primitive->Draw(); }
    }
 
    void gfxInit(int width, int height) {
       p_width = width;
       p_height = height;
       // Try to initialize GLFW
-      if (!glfwInit()) throw std::logic_error("Unable to initialize GLFW");
+      if (!glfwInit()) throw std::runtime_error("Unable to initialize GLFW");
 
       // Try to create a window
       glfwWindowHint(GLFW_SAMPLES, 4);
@@ -925,7 +927,7 @@ private:
       glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 5);
       glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
       window = glfwCreateWindow(p_width, p_height, p_title.c_str(), NULL, NULL);
-      if (!window) throw std::logic_error("Unable to create GLFW Window");
+      if (!window) throw std::runtime_error("Unable to create GLFW Window");
 
       // Load GL
       glfwMakeContextCurrent(window);
@@ -964,7 +966,7 @@ private:
                                     // streaming perf. See above link for details.
       glBufferSubData(GL_ARRAY_BUFFER, 0, p_maxCount * sizeof(GLfloat) * 4, particle_color_data.data());
 
-      for (auto& line : lines) { line->updateBuffers(); }
+      for (auto& primitive : primitives) { primitive->UpdateBuffers(); }
    }
 
    void bufferInit() requires(ColorfulParticle<T>) {
@@ -1008,8 +1010,6 @@ private:
       // Initialize with empty (NULL) buffer : it will be updated later, each
       // frame.
       glBufferData(GL_ARRAY_BUFFER, p_maxCount * 4 * sizeof(GLubyte), NULL, GL_STREAM_DRAW);
-
-      // for (auto line : lines) { line->GraphicsInit(); }
    }
 
    template <typename _Rep, typename _Period>
@@ -1061,24 +1061,25 @@ private:
    void loop(duration<_Rep, _Period> sleepInterval) {
       if (swapInterval)
       {
-         mtx.lock();
+         unique_lock lock(mtx);
          swapInterval = false;
          glfwSwapInterval(1);
-         mtx.unlock();
       }
-      mtx.lock_shared();
-      tick();
-      mtx.unlock_shared();
+      {
+         shared_lock lock(mtx);
+         tick();
+      }
       sleep_for(sleepInterval);
    }
 
    template <typename _Rep, typename _Period>
    void mainThreadLoop(duration<_Rep, _Period> sleepInterval) {
       glfwPollEvents();
-      mtx.lock();
-      glfwGetFramebufferSize(window, &p_width, &p_height);
-      timeElapsed = duration_cast<milliseconds>(high_resolution_clock::now() - p_initialTime);
-      mtx.unlock();
+      {
+         unique_lock lock(mtx);
+         glfwGetFramebufferSize(window, &p_width, &p_height);
+         timeElapsed = duration_cast<milliseconds>(high_resolution_clock::now() - p_initialTime);
+      }
       sleep_for(sleepInterval);
    }
 };
