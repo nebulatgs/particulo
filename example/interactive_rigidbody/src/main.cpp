@@ -98,9 +98,9 @@ protected:
             each->pos += each->vel * TIMESTEP;
          }
          // line->SetColor(timeElapsed.count() * 1000);
-         // auto controlPoints = bezier->GetControlPoints();
+         auto controlPoints = bezier->GetControlPoints();
          // for (auto& controlPoint : controlPoints) { controlPoint.x++; }
-         // bezier->SetControlPoints(controlPoints);
+         bezier->SetControlPoints(std::move(controlPoints));
       }
       if (newParticle && rightMouseDown) newParticle->radius += 1.0;
       SetTransform(scale * translation);

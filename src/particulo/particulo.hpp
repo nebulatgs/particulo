@@ -338,7 +338,7 @@ class Bezier : public GraphicsPrimitive
 {
 public:
    Bezier(int index, vector<v2d::v2d> controlPoints, double thickness, uint32_t color)
-       : index(index), controlPoints(std::move(controlPoints)), color(color) {
+       : index(index), controlPoints(std::move(controlPoints)), color(color), thickness(thickness) {
       Update();
    }
 
@@ -349,7 +349,7 @@ public:
 
 public:
    void SetControlPoints(vector<v2d::v2d> controlPoints) {
-      this->controlPoints = controlPoints;
+      this->controlPoints = std::move(controlPoints);
       Update();
    }
    void SetColor(uint32_t color) {
@@ -390,8 +390,8 @@ private:
    int index;
    uint32_t color;
    double thickness;
-   PolyLine polyLine;
    vector<v2d::v2d> controlPoints;
+   PolyLine polyLine;
 };
 // Main
 template <ColorfulParticle T, int threadCount = 1>
