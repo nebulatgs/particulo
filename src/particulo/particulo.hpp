@@ -54,7 +54,7 @@ using std::unique_lock;
 #include "shader.hpp"
 #include "v2d.hpp"
 #include <GLFW/glfw3.h>
-#include <Polyline2D.hpp>
+#include <Polyline2D.h>
 #include <glad/glad.h>
 #include <glm/gtc/matrix_inverse.hpp>
 namespace Particulo

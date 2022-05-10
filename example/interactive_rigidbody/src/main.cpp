@@ -49,18 +49,18 @@ protected:
       SetBGColor(0x222f3eFF);
       // line = AddPolyLine({{0, 0}, {0, 100}, {100, 100}}, 0xFF00FFFF, 2.0);
       // auto line2 = AddPolyLine({{100, 100}, {100, 0}, {0, 0}}, 0x00FFFFFF, 3.0);
-      bezier = AddBezier(
-          {
-              {0, 0},
-              {0, 100},
-              {100, 0},
-              {100, 100},
-              {100, 100},
-              {200, 0},
-              {0, 200},
-              {0, 100},
-          },
-          0xFFFFFFFF, 1.0);
+      // bezier = AddBezier(
+      //     {
+      //         {0, 0},
+      //         {0, 100},
+      //         {100, 0},
+      //         {100, 100},
+      //         {100, 100},
+      //         {200, 0},
+      //         {0, 200},
+      //         {0, 100},
+      //     },
+      //     0xFFFFFFFF, 1.0);
 
       // line->GraphicsInit();
       // line2->GraphicsInit();
@@ -98,9 +98,9 @@ protected:
             each->pos += each->vel * TIMESTEP;
          }
          // line->SetColor(timeElapsed.count() * 1000);
-         auto controlPoints = bezier->GetControlPoints();
+         // auto controlPoints = bezier->GetControlPoints();
          // for (auto& controlPoint : controlPoints) { controlPoint.x++; }
-         bezier->SetControlPoints(std::move(controlPoints));
+         // bezier->SetControlPoints(std::move(controlPoints));
       }
       if (newParticle && rightMouseDown) newParticle->radius += 1.0;
       SetTransform(scale * translation);
@@ -189,7 +189,7 @@ private:
    double sf = 1.0;
    shared_ptr<Particle> newParticle;
    shared_ptr<::Particulo::PolyLine> line;
-   shared_ptr<::Particulo::Bezier> bezier;
+   // shared_ptr<::Particulo::Bezier> bezier;
 };
 
 int main() {
