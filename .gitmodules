@@ -7,6 +7,6 @@
 [submodule "lib/glfw"]
 	path = lib/glfw
 	url = https://github.com/glfw/glfw.git
-[submodule "lib/PolyLine2D"]
-	path = lib/PolyLine2D
+[submodule "lib/Polyline2D"]
+	path = lib/Polyline2D
 	url = https://github.com/CrushedPixel/Polyline2D

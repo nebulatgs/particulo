@@ -15,7 +15,7 @@ add_subdirectory("../lib/glm" "../lib/glm/build")
 
 include_directories("../lib/glfw/include")
 include_directories("../lib/glad/include")
-include_directories("../lib/PolyLine2D/include")
+include_directories("../lib/Polyline2D/include")
 include_directories("../lib/glm")
 include_directories("../src")
 
